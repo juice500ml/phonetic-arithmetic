@@ -3,7 +3,7 @@
 ## Install
 ```bash
 micromamba install -y python=3.10 pytorch pytorch-cuda=12.* -c pytorch -c nvidia -c conda-forge
-pip install transformers==4.35.0 pandas>2 librosa>0.10 numpy==1.23.5 datasets praatio panphon
+pip install transformers==4.35.0 pandas>2 librosa>0.10 numpy==1.23.5 datasets praatio panphon scipy tqdm
 ```
 
 ## Prepare dataset
@@ -37,3 +37,9 @@ done
 ```
 
 ## Estimate cosine similarities between representations
+```bash
+python3 estimate_similarity.py \
+    --model wavlm-large \
+    --slice audioslice \
+    --dataset timit
+```
