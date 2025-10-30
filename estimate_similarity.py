@@ -15,11 +15,11 @@ def filter_phones(df, cutoff=100):
     df = df[df.split == "test"]
     phones = df[~df.ipa.isna()].ipa.unique().tolist()
     for phone, count in df.ipa.value_counts().items():
-        if not ft.seg_known(phone):
-            print(f"{phone} is not known in panphon, removing.")
-            phones.remove(phone)
-        elif count < cutoff:
+        if count < cutoff:
             print(f"{phone} has only {count} samples, removing.")
+            phones.remove(phone)
+        elif not ft.seg_known(phone):
+            print(f"{phone} is not known in panphon, removing.")
             phones.remove(phone)
     return phones
 
