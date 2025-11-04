@@ -24,16 +24,52 @@ dataset="timit"
 model="microsoft/wavlm-large"
 model_name="wavlm-large"
 
+# Self-supervised representations
 for i in {0..24}
 do
-  python3 local/extract_features.py \
+  # Feature-slicing
+  python3 extract_features.py \
     --model $model \
     --dataset_csv "feats/${dataset}.csv" \
     --output_path "feats/${dataset}-${model_name}-${i}-featslice.pkl" \
     --device cuda:0 \
     --layer_index $i \
     --pool average
+
+  # Audio-slicing
+  python3 extract_features.py \
+    --model $model \
+    --dataset_csv "feats/${dataset}.csv" \
+    --output_path "feats/${dataset}-${model_name}-${i}-audioslice.pkl" \
+    --device cuda:0 \
+    --layer_index $i \
+    --pool average \
+    --slice
 done
+```
+
+## Extract traditional speech features
+```bash
+dataset="timit"
+model="mfcc" # or "melspec"
+
+# Feature-slicing
+python3 extract_features.py \
+  --model $model \
+  --dataset_csv "feats/${dataset}.csv" \
+  --output_path "feats/${dataset}-${model}-0-featslice.pkl" \
+  --device cpu \
+  --pool average
+
+# Audio-slicing
+python3 extract_features.py \
+  --model $model \
+  --dataset_csv "feats/${dataset}.csv" \
+  --output_path "feats/${dataset}-${model}-0-audioslice.pkl" \
+  --device cpu \
+  --pool average \
+  --slice
+
 ```
 
 ## Estimate cosine similarities between representations

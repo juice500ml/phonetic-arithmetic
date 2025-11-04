@@ -53,7 +53,7 @@ def _get_stride_size(model):
 
 def _get_window_size(model):
     if model in ("melspec", "mfcc"):
-        raise NotImplementedError("Window size is not implemented for melspec or mfcc")
+        return 1 # minimum size
     else:
         return 400
 
@@ -110,10 +110,11 @@ if __name__ == "__main__":
     print("Extracting features...")
     if args.model == "melspec" or args.model == "mfcc":
         feat_func = {
-            "melspec": librosa.feature.melspectrogram,
-            "mfcc": librosa.feature.mfcc,
+            "melspec": functools.partial(librosa.feature.melspectrogram, sr=16000),
+            "mfcc": functools.partial(librosa.feature.mfcc, sr=16000),
         }[args.model]
-        for path in tqdm(df.audio.unique()):
+        data = {}
+        for path in tqdm(df.audio_path.unique()):
             x, _ = librosa.load(path, sr=16000, mono=True)
             data[path] = feat_func(y=x, sr=16000).T
 
@@ -123,13 +124,13 @@ if __name__ == "__main__":
                 x, _ = librosa.load(path, sr=16000, mono=True)
                 for row in df[df.audio_path == path].itertuples():
                     sliced_x = _slice_with_min_window(x, int(row.min * 16000), int(row.max * 16000), _get_window_size(args.model))
-                    df.at[row.Index, "feat"] = feat(y=x, sr=16000).T
+                    df.at[row.Index, "feat"] = feat_func(y=sliced_x, n_fft=min(2048, len(sliced_x))).T
         else:
             data = {}
             for path in tqdm(df.audio_path.unique()):
                 x, _ = librosa.load(path, sr=16000, mono=True)
-                data[path] = feat_func(y=x, sr=16000).T
-            df["feat"] = df.apply(functools.partial(_get_feat, feats=data, stride_size=_get_stride_size(args.model)), axis=1)
+                data[path] = feat_func(y=x, n_fft=min(2048, len(x))).T
+            df["feat"] = df.apply(functools.partial(_slice_feats, feats=data, stride_size=_get_stride_size(args.model)), axis=1)
     else:
         processor = Wav2Vec2FeatureExtractor.from_pretrained(args.model)
         model = AutoModel.from_pretrained(args.model).to(args.device)

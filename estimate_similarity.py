@@ -8,6 +8,7 @@ import pickle
 import multiprocessing as mp
 import argparse
 import panphon
+from pathlib import Path
 
 
 def filter_phones(df, cutoff=100):
@@ -135,7 +136,7 @@ def parse_args():
     )
     parser.add_argument(
         "--model",
-        choices=["wavlm-large", "hubert-large", "w2v2-large", ],
+        choices=["wavlm-large", "hubert-large", "w2v2-large", "melspec", "mfcc"],
         required=True,
     )
     parser.add_argument(
@@ -156,6 +157,10 @@ if __name__ == '__main__':
     results = {q: [] for q in quadruples}
     for layer in tqdm(range(25)):
         inpath = f"feats/{args.dataset}-{args.model}-{layer}-{args.slice}.pkl"
+        if not Path(inpath).exists():
+            print(f"{inpath} does not exist, breaking.")
+            break
+
         df = pd.read_pickle(inpath)
         df.feat = df.feat.apply(normalize)
         df = df[df.ipa.isin(phones) & (df.split == "test")].reset_index(drop=True).copy()
