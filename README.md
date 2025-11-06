@@ -20,15 +20,17 @@ python3 prepare_datasets.py \
 
 ## Extract self-supervised speech models' layerwise representations
 ```bash
-dataset="timit"
+# Any transformers model should work
+# ex. facebook/hubert-large-ll60k facebook/wav2vec2-large-lv60 facebook/wav2vec2-large-xlsr-53 facebook/wav2vec2-xlsr-53-espeak-cv-ft
 model="microsoft/wavlm-large"
 model_name="wavlm-large"
+dataset="timit"
 
 # Self-supervised representations
 for i in {0..24}
 do
   # Feature-slicing
-  python3 extract_features.py \
+  CUDA_VISIBLE_DEVICES=2 python3 extract_features.py \
     --model $model \
     --dataset_csv "feats/${dataset}.csv" \
     --output_path "feats/${dataset}-${model_name}-${i}-featslice.pkl" \
@@ -76,6 +78,6 @@ python3 extract_features.py \
 ```bash
 python3 estimate_similarity.py \
     --model wavlm-large \
-    --slice audioslice \
+    --slice featslice \
     --dataset timit
 ```

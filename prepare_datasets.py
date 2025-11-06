@@ -135,7 +135,7 @@ def _prepare_timit(timit_path: Path):
 def _prepare_voxangeles(root_path: Path):
     rows = []
 
-    for path in (root_path / "data/audited_aligned").glob("**/*.TextGrid"):
+    for path in tqdm((root_path / "data/audited_aligned").glob("**/*.TextGrid")):
         grid = praatio.textgrid.openTextgrid(path, includeEmptyIntervals=False)
         tier_name = next((x for x in grid.tierNames if x in ("phone", "phones", "Narrow")))
         for entry in grid.getTier(tier_name).entries:
@@ -143,7 +143,7 @@ def _prepare_voxangeles(root_path: Path):
                 "audio_path": str(path.with_suffix(".wav")),
                 "min": entry.start,
                 "max": entry.end,
-                "voxangeles_phn": entry.label,
+                "ipa": entry.label,
                 "split": "test",
                 "language": path.parent.name,
             })

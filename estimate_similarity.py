@@ -136,7 +136,7 @@ def parse_args():
     )
     parser.add_argument(
         "--model",
-        choices=["wavlm-large", "hubert-large", "w2v2-large", "melspec", "mfcc"],
+        choices=["wavlm-large", "hubert-large", "w2v2-large", "xlsr-53", "w2v2-phoneme", "w2v2-multipa", "melspec", "mfcc"],
         required=True,
     )
     parser.add_argument(
@@ -151,7 +151,8 @@ if __name__ == '__main__':
     args = parse_args()
     print(args)
 
-    phones = filter_phones(pd.read_csv(f"feats/{args.dataset}.csv"))
+    cutoff = {"timit": 100, "voxangeles": 50}[args.dataset]
+    phones = filter_phones(pd.read_csv(f"feats/{args.dataset}.csv"), cutoff=cutoff)
     quadruples = get_quadruples(phones)
 
     results = {q: [] for q in quadruples}
