@@ -11,7 +11,7 @@ import panphon
 from pathlib import Path
 
 
-def filter_phones(df, cutoff=100):
+def filter_phones(df, cutoff=50):
     ft = panphon.FeatureTable()
     df = df[df.split == "test"]
     phones = df[~df.ipa.isna()].ipa.unique().tolist()
@@ -151,8 +151,7 @@ if __name__ == '__main__':
     args = parse_args()
     print(args)
 
-    cutoff = {"timit": 100, "voxangeles": 50}[args.dataset]
-    phones = filter_phones(pd.read_csv(f"feats/{args.dataset}.csv"), cutoff=cutoff)
+    phones = filter_phones(pd.read_csv(f"feats/{args.dataset}.csv"))
     quadruples = get_quadruples(phones)
 
     results = {q: [] for q in quadruples}
