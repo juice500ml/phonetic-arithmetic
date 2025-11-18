@@ -109,7 +109,7 @@ def _parse_feature_spec(token):
     if len(token) < 2:
         raise argparse.ArgumentTypeError(f"Invalid feature: {token}")
 
-    sign, feature = token[0], token[1:]
+    feature, sign = token[:-1], token[-1]
 
     if feature not in PANPHON_FEATURES:
         raise argparse.ArgumentTypeError(f"Unknown feature: {feature}")
@@ -130,7 +130,7 @@ def _get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--feats", type=Path, help="Path to the features")
     parser.add_argument("--target_feature", choices=PANPHON_FEATURES, help="Phonological (panphon) feature to use")
-    parser.add_argument("--fixed_features", nargs="+", type=_parse_feature_spec, help="Phonological (panphon) feature to keep fixed, ex. +syl -cons 0voi")
+    parser.add_argument("--fixed_features", nargs="+", type=_parse_feature_spec, help="Phonological (panphon) feature to keep fixed, ex. syl- cons+ voi0")
     parser.add_argument("--sample_size", default=3000, type=int, help="Number of phone samples to test")
     parser.add_argument("--seed", type=int, help="Random seed", default=42)
     parser.add_argument("--range_min", type=int, default=-4, help="Minimum lambda value")
