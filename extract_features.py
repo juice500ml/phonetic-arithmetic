@@ -20,13 +20,14 @@ def _get_args():
     parser.add_argument("--layer_index", type=int, help="Layer index", default=-1)
     parser.add_argument("--pool", default="center", choices=("center", "average", "none"), help="Pooling method")
     parser.add_argument("--slice", action="store_true", help="Slice audio")
+    parser.add_argument("--sr", type=int, default=16000, help="Sample rate (default: 16000)")
     return parser.parse_args()
 
 
-def _slice_feats(row, feats, stride_size):
+def _slice_feats(row, feats, stride_size, sr):
     f = feats[row.audio_path]
     def _sec_to_index(t):
-        i = int(t * 16000) // stride_size
+        i = int(t * sr) // stride_size
         return np.clip(i, 0, len(f) - 1)
     start_index = _sec_to_index(row["min"])
     end_index = _sec_to_index(row["max"])
@@ -90,7 +91,7 @@ def _slice_with_min_window(x, min_i, max_i, window_size):
 
 
 def _infer(x, processor, model, args):
-    x = processor(raw_speech=[x], sampling_rate=16000, padding=False, return_tensors="pt")
+    x = processor(raw_speech=[x], sampling_rate=args.sr, padding=False, return_tensors="pt")
 
     if args.layer_index == -1:
         outputs = model(**{k: t.to(args.device) for k, t in x.items()})
@@ -110,44 +111,45 @@ if __name__ == "__main__":
     print("Extracting features...")
     if args.model == "melspec" or args.model == "mfcc":
         feat_func = {
-            "melspec": functools.partial(librosa.feature.melspectrogram, sr=16000),
-            "mfcc": functools.partial(librosa.feature.mfcc, sr=16000),
+            "melspec": functools.partial(librosa.feature.melspectrogram, sr=args.sr),
+            "mfcc": functools.partial(librosa.feature.mfcc, sr=args.sr),
         }[args.model]
         data = {}
         for path in tqdm(df.audio_path.unique()):
-            x, _ = librosa.load(path, sr=16000, mono=True)
-            data[path] = feat_func(y=x, sr=16000).T
+            x, _ = librosa.load(path, sr=args.sr, mono=True)
+            data[path] = feat_func(y=x, sr=args.sr).T
 
         if args.slice:
             df["feat"] = None
             for path in tqdm(df.audio_path.unique()):
-                x, _ = librosa.load(path, sr=16000, mono=True)
+                x, _ = librosa.load(path, sr=args.sr, mono=True)
                 for row in df[df.audio_path == path].itertuples():
-                    sliced_x = _slice_with_min_window(x, int(row.min * 16000), int(row.max * 16000), _get_window_size(args.model))
+                    sliced_x = _slice_with_min_window(x, int(row.min * args.sr), int(row.max * args.sr), _get_window_size(args.model))
                     df.at[row.Index, "feat"] = feat_func(y=sliced_x, n_fft=min(2048, len(sliced_x))).T
         else:
             data = {}
             for path in tqdm(df.audio_path.unique()):
-                x, _ = librosa.load(path, sr=16000, mono=True)
+                x, _ = librosa.load(path, sr=args.sr, mono=True)
                 data[path] = feat_func(y=x, n_fft=min(2048, len(x))).T
-            df["feat"] = df.apply(functools.partial(_slice_feats, feats=data, stride_size=_get_stride_size(args.model)), axis=1)
+            df["feat"] = df.apply(functools.partial(_slice_feats, feats=data, stride_size=_get_stride_size(args.model), sr=args.sr), axis=1)
     else:
+        assert args.sr == 16000, "Only 16kHz is supported for SSL models."
         processor = Wav2Vec2FeatureExtractor.from_pretrained(args.model)
         model = AutoModel.from_pretrained(args.model).to(args.device)
 
         if args.slice:
             df["feat"] = None
             for path in tqdm(df.audio_path.unique()):
-                x, _ = librosa.load(path, sr=16000, mono=True)
+                x, _ = librosa.load(path, sr=args.sr, mono=True)
                 for row in df[df.audio_path == path].itertuples():
-                    sliced_x = _slice_with_min_window(x, int(row.min * 16000), int(row.max * 16000), _get_window_size(args.model))
+                    sliced_x = _slice_with_min_window(x, int(row.min * args.sr), int(row.max * args.sr), _get_window_size(args.model))
                     df.at[row.Index, "feat"] = _infer(sliced_x, processor, model, args)
         else:
             data = {}
             for path in tqdm(df.audio_path.unique()):
-                x, _ = librosa.load(path, sr=16000, mono=True)
+                x, _ = librosa.load(path, sr=args.sr, mono=True)
                 data[path] = _infer(x, processor, model, args)
-            df["feat"] = df.apply(functools.partial(_slice_feats, feats=data, stride_size=_get_stride_size(args.model)), axis=1)
+            df["feat"] = df.apply(functools.partial(_slice_feats, feats=data, stride_size=_get_stride_size(args.model), sr=args.sr), axis=1)
 
     df["feat"] = df.apply(functools.partial(_pool_feats, pool=args.pool), axis=1)
     df.to_pickle(args.output_path)
