@@ -1,5 +1,6 @@
 import argparse
 from pathlib import Path
+import hashlib
 
 import pandas as pd
 import numpy as np
@@ -94,6 +95,11 @@ def analyze_audio(audio, start, end, sr=16000):
     result["F1"] = np.mean(f1)
     f2 = [formant.get_value_at_time(2, t) for t in times if start < t < end]
     result["F2"] = np.mean(f2)
+    f3 = [formant.get_value_at_time(3, t) for t in times if start < t < end]
+    result["F3"] = np.mean(f3)
+
+    f1bw = [formant.get_bandwidth_at_time(1, t) for t in times if start < t < end]
+    result["F1BW"] = np.mean(f1bw)
 
     harmonicity = snd.to_harmonicity()
     hnr = [harmonicity.get_value(t) for t in times if start < t < end]
@@ -101,6 +107,11 @@ def analyze_audio(audio, start, end, sr=16000):
 
     segment = snd.extract_part(from_time=start, to_time=end, preserve_times=False)
     result["COG"] = segment.to_spectrum().get_center_of_gravity()
+
+    result["ZCR"] = np.mean(librosa.zero_crossings(audio[int(start*sr):int(end*sr)]))
+
+    rms = librosa.feature.rms(y=audio[int(start*sr):int(end*sr)])
+    result["RMSMIN"] = rms.min() / rms.mean()
 
     return result
 
@@ -126,6 +137,30 @@ def _parse_feature_spec(token):
         )
 
 
+def _split_train_test(df):
+    # TIMIT
+    if len(df.split.unique()) == 2:
+        train_df = df[df.split == "train"]
+        test_df = df[df.split == "test"]
+
+    # VoxAngeles
+    else:
+        assert "language" in df.columns
+        df["language"] = df["language"].fillna("nan").astype("string")  # There's "nan" language
+
+        keys = [(lang, int(hashlib.md5(lang.encode()).hexdigest(), 16)) for lang in df.language.unique()]
+        keys = sorted(keys, key=lambda x: x[1])
+        print(len(keys))
+        assert len(keys) == 95
+        mid = len(keys) // 2
+        train_langs = [lang for lang, _ in keys[:mid]]
+        test_langs  = [lang for lang, _ in keys[mid:]]
+        train_df = df[df.language.isin(train_langs)]
+        test_df  = df[df.language.isin(test_langs)]
+
+    return train_df, test_df
+
+
 def _get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--feats", type=Path, help="Path to the features")
@@ -133,10 +168,10 @@ def _get_args():
     parser.add_argument("--fixed_features", nargs="+", type=_parse_feature_spec, help="Phonological (panphon) feature to keep fixed, ex. syl- cons+ voi0")
     parser.add_argument("--sample_size", default=3000, type=int, help="Number of phone samples to test")
     parser.add_argument("--seed", type=int, help="Random seed", default=42)
-    parser.add_argument("--range_min", type=int, default=-4, help="Minimum lambda value")
+    parser.add_argument("--range_min", type=int, default=-5, help="Minimum lambda value")
     parser.add_argument("--range_max", type=int, default=5, help="Maximum lambda value")
     parser.add_argument("--output_path", type=Path, help="Path to the output file")
-    parser.add_argument("--ssl_model", type=str, default="microsoft/wavlm-large", help="Huggingface model name or path to the SSL model")
+    parser.add_argument("--ssl_model", type=str, default=None, help="Huggingface model name or path to the SSL model")
     parser.add_argument("--synth_model", type=str, default="juice500/vocos-wavlm-libritts", help="Huggingface model name or path to the vocos model")
     parser.add_argument("--device", type=str, default="cpu", help="Device to use")
     args = parser.parse_args()
@@ -150,8 +185,7 @@ if __name__ == "__main__":
     mp = ModifyPhone(ssl_model=args.ssl_model, synth_model=args.synth_model, device=args.device)
 
     df = pd.read_pickle(args.feats)
-    df_train = df[df.split == "train"]
-    df_test = df[df.split == "test"]
+    df_train, df_test = _split_train_test(df)
 
     phones = filter_phones(df_test)
     pos_phones, neg_phones = separate_phones(phones, args.target_feature, args.fixed_features)
@@ -163,7 +197,7 @@ if __name__ == "__main__":
         (df_test[df_test.ipa.isin(pos_phones)], True),
         (df_test[df_test.ipa.isin(neg_phones)], False),
     ]:
-        _df = _df.sample(args.sample_size, random_state=args.seed)
+        _df = _df.sample(args.sample_size, random_state=args.seed, replace=True)
         for row in tqdm(_df.itertuples()):
             weight = rng.uniform(args.range_min, args.range_max)
             weight = -weight if is_positive_phone else +weight
