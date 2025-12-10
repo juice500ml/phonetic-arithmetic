@@ -4,73 +4,38 @@
 
 ### Applying height vector to phone [i]
 ![Synthesis: Height (i)](examples/synth-hi-i.png)
-<table>
-<tr>
-<td>λ = -5<br><audio controls><source src="examples/synth-hi-i--5.wav" type="audio/wav"></audio></td>
-<td>λ = -2<br><audio controls><source src="examples/synth-hi-i--2.wav" type="audio/wav"></audio></td>
-<td>λ = -1<br><audio controls><source src="examples/synth-hi-i--1.wav" type="audio/wav"></audio></td>
-<td>λ = 0<br><audio controls><source src="examples/synth-hi-i-0.wav" type="audio/wav"></audio></td>
-<td>λ = 1<br><audio controls><source src="examples/synth-hi-i-1.wav" type="audio/wav"></audio></td>
-<td>λ = 2<br><audio controls><source src="examples/synth-hi-i-2.wav" type="audio/wav"></audio></td>
-<td>λ = 5<br><audio controls><source src="examples/synth-hi-i-5.wav" type="audio/wav"></audio></td>
-</tr>
-</table>
+
+| λ = -5 | λ = -2 | λ = -1 | λ = 0 | λ = 1 | λ = 2 | λ = 5 |
+|--------|--------|--------|-------|-------|-------|-------|
+| [🎵 Audio](examples/synth-hi-i--5.wav) | [🎵 Audio](examples/synth-hi-i--2.wav) | [🎵 Audio](examples/synth-hi-i--1.wav) | [🎵 Audio](examples/synth-hi-i-0.wav) | [🎵 Audio](examples/synth-hi-i-1.wav) | [🎵 Audio](examples/synth-hi-i-2.wav) | [🎵 Audio](examples/synth-hi-i-5.wav) |
 
 ### Applying rounding vector to phone [i]
 ![Synthesis: Rounding (i)](examples/synth-round-i.png)
-<table>
-<tr>
-<td>λ = -5<br><audio controls><source src="examples/synth-round-i--5.wav" type="audio/wav"></audio></td>
-<td>λ = -2<br><audio controls><source src="examples/synth-round-i--2.wav" type="audio/wav"></audio></td>
-<td>λ = -1<br><audio controls><source src="examples/synth-round-i--1.wav" type="audio/wav"></audio></td>
-<td>λ = 0<br><audio controls><source src="examples/synth-round-i-0.wav" type="audio/wav"></audio></td>
-<td>λ = 1<br><audio controls><source src="examples/synth-round-i-1.wav" type="audio/wav"></audio></td>
-<td>λ = 2<br><audio controls><source src="examples/synth-round-i-2.wav" type="audio/wav"></audio></td>
-<td>λ = 5<br><audio controls><source src="examples/synth-round-i-5.wav" type="audio/wav"></audio></td>
-</tr>
-</table>
+
+| λ = -5 | λ = -2 | λ = -1 | λ = 0 | λ = 1 | λ = 2 | λ = 5 |
+|--------|--------|--------|-------|-------|-------|-------|
+| [🎵 Audio](examples/synth-round-i--5.wav) | [🎵 Audio](examples/synth-round-i--2.wav) | [🎵 Audio](examples/synth-round-i--1.wav) | [🎵 Audio](examples/synth-round-i-0.wav) | [🎵 Audio](examples/synth-round-i-1.wav) | [🎵 Audio](examples/synth-round-i-2.wav) | [🎵 Audio](examples/synth-round-i-5.wav) |
 
 ### Applying nasal vector to phone [b]
 ![Synthesis: Nasality (b)](examples/synth-nas-b.png)
-<table>
-<tr>
-<td>λ = -5<br><audio controls><source src="examples/synth-nas-b--5.wav" type="audio/wav"></audio></td>
-<td>λ = -2<br><audio controls><source src="examples/synth-nas-b--2.wav" type="audio/wav"></audio></td>
-<td>λ = -1<br><audio controls><source src="examples/synth-nas-b--1.wav" type="audio/wav"></audio></td>
-<td>λ = 0<br><audio controls><source src="examples/synth-nas-b-0.wav" type="audio/wav"></audio></td>
-<td>λ = 1<br><audio controls><source src="examples/synth-nas-b-1.wav" type="audio/wav"></audio></td>
-<td>λ = 2<br><audio controls><source src="examples/synth-nas-b-2.wav" type="audio/wav"></audio></td>
-<td>λ = 5<br><audio controls><source src="examples/synth-nas-b-5.wav" type="audio/wav"></audio></td>
-</tr>
-</table>
+
+| λ = -5 | λ = -2 | λ = -1 | λ = 0 | λ = 1 | λ = 2 | λ = 5 |
+|--------|--------|--------|-------|-------|-------|-------|
+| [🎵 Audio](examples/synth-nas-b--5.wav) | [🎵 Audio](examples/synth-nas-b--2.wav) | [🎵 Audio](examples/synth-nas-b--1.wav) | [🎵 Audio](examples/synth-nas-b-0.wav) | [🎵 Audio](examples/synth-nas-b-1.wav) | [🎵 Audio](examples/synth-nas-b-2.wav) | [🎵 Audio](examples/synth-nas-b-5.wav) |
 
 ### Applying strident vector to phone [b]
 ![Synthesis: Strident (b)](examples/synth-strid-b.png)
-<table>
-<tr>
-<td>λ = -5<br><audio controls><source src="examples/synth-strid-b--5.wav" type="audio/wav"></audio></td>
-<td>λ = -2<br><audio controls><source src="examples/synth-strid-b--2.wav" type="audio/wav"></audio></td>
-<td>λ = -1<br><audio controls><source src="examples/synth-strid-b--1.wav" type="audio/wav"></audio></td>
-<td>λ = 0<br><audio controls><source src="examples/synth-strid-b-0.wav" type="audio/wav"></audio></td>
-<td>λ = 1<br><audio controls><source src="examples/synth-strid-b-1.wav" type="audio/wav"></audio></td>
-<td>λ = 2<br><audio controls><source src="examples/synth-strid-b-2.wav" type="audio/wav"></audio></td>
-<td>λ = 5<br><audio controls><source src="examples/synth-strid-b-5.wav" type="audio/wav"></audio></td>
-</tr>
-</table>
+
+| λ = -5 | λ = -2 | λ = -1 | λ = 0 | λ = 1 | λ = 2 | λ = 5 |
+|--------|--------|--------|-------|-------|-------|-------|
+| [🎵 Audio](examples/synth-strid-b--5.wav) | [🎵 Audio](examples/synth-strid-b--2.wav) | [🎵 Audio](examples/synth-strid-b--1.wav) | [🎵 Audio](examples/synth-strid-b-0.wav) | [🎵 Audio](examples/synth-strid-b-1.wav) | [🎵 Audio](examples/synth-strid-b-2.wav) | [🎵 Audio](examples/synth-strid-b-5.wav) |
 
 ### Applying voicing vector to phone [b]
 ![Synthesis: Voicing (b)](examples/synth-voi-b.png)
-<table>
-<tr>
-<td>λ = -5<br><audio controls><source src="examples/synth-voi-b--5.wav" type="audio/wav"></audio></td>
-<td>λ = -2<br><audio controls><source src="examples/synth-voi-b--2.wav" type="audio/wav"></audio></td>
-<td>λ = -1<br><audio controls><source src="examples/synth-voi-b--1.wav" type="audio/wav"></audio></td>
-<td>λ = 0<br><audio controls><source src="examples/synth-voi-b-0.wav" type="audio/wav"></audio></td>
-<td>λ = 1<br><audio controls><source src="examples/synth-voi-b-1.wav" type="audio/wav"></audio></td>
-<td>λ = 2<br><audio controls><source src="examples/synth-voi-b-2.wav" type="audio/wav"></audio></td>
-<td>λ = 5<br><audio controls><source src="examples/synth-voi-b-5.wav" type="audio/wav"></audio></td>
-</tr>
-</table>
+
+| λ = -5 | λ = -2 | λ = -1 | λ = 0 | λ = 1 | λ = 2 | λ = 5 |
+|--------|--------|--------|-------|-------|-------|-------|
+| [🎵 Audio](examples/synth-voi-b--5.wav) | [🎵 Audio](examples/synth-voi-b--2.wav) | [🎵 Audio](examples/synth-voi-b--1.wav) | [🎵 Audio](examples/synth-voi-b-0.wav) | [🎵 Audio](examples/synth-voi-b-1.wav) | [🎵 Audio](examples/synth-voi-b-2.wav) | [🎵 Audio](examples/synth-voi-b-5.wav) |
 
 
 ## Install
