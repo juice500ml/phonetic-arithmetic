@@ -200,8 +200,6 @@ if __name__ == "__main__":
         _df = _df.sample(args.sample_size, random_state=args.seed, replace=True)
         for row in tqdm(_df.itertuples()):
             weight = rng.uniform(args.range_min, args.range_max)
-            weight = -weight if is_positive_phone else +weight
-
             audio = mp.load_audio(row.audio_path)
             synth_audio = mp.modify(audio, vec * 0.0, row.min, row.max)
             modified_audio = mp.modify(audio, vec * weight, row.min, row.max)
