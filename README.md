@@ -84,3 +84,29 @@ python3 estimate_similarity.py \
     --slice featslice \
     --dataset timit
 ```
+
+## Synthesize modified audio using
+```bash
+# Consonants
+feats=(voi strid nas son)
+for i in "${!feats[@]}"; do
+  target_feature=${feats[$i]}
+  python3 analyze_synth.py --feats feats/timit-wavlm-large-24-featslice.pkl \
+    --target_feature $target_feature --fixed_features cons+ \
+    --output_path feats/timit-wavlm-synth-consonant-${target_feature}.csv \
+    --device cuda:0 --ssl_model microsoft/wavlm-large \
+    --synth_model juice500/vocos-wavlm-libritts
+done
+
+# Vowels
+features2=(hi lo back round)
+for i in "${!features2[@]}"; do
+  target_feature=${features2[$i]}
+  python3 analyze_synth.py --feats feats/timit-wavlm-large-24-featslice.pkl \
+    --target_feature $target_feature --fixed_features cons- \
+    --output_path feats/timit-wavlm-synth-vowel-${target_feature}.csv \
+    --device cuda:0 --ssl_model microsoft/wavlm-large \
+    --synth_model juice500/vocos-wavlm-libritts
+
+# For VoxAngeles, use juice500/vocos-wavlm-fleursr
+```
