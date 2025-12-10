@@ -6,6 +6,7 @@ import numpy as np
 import scipy.signal
 import scipy.misc
 from pathlib import Path
+import soundfile as sf
 
 from analyze_synth import ModifyPhone, filter_phones, separate_phones, get_phonological_vector
 
@@ -172,17 +173,20 @@ if __name__ == "__main__":
 
 
     Path("plots/main").mkdir(parents=True, exist_ok=True)
+    Path("examples").mkdir(parents=True, exist_ok=True)
+
     for setting in settings:
         pos_phones, neg_phones = separate_phones(phones, setting["feature"], setting["fixed_features"])
         vec = get_phonological_vector(pos_phones, neg_phones, df_train)
         row = df_test[(df_test.ipa == setting["phone"]) & df_test.audio_path.str.contains(setting["filename"])].iloc[0]
 
         audio = mp.load_audio(row["audio_path"])
-        fig, axes = plt.subplots(1, 7, figsize=(14, 2))
+        fig, axes = plt.subplots(1, 7, figsize=(14, 2), constrained_layout=True)
 
         for i, weight in enumerate((-5, -2, -1, 0, 1, 2, 5)):
             modified_audio = mp.modify(audio, vec * weight, row["min"], row["max"])
             signal = modified_audio[int(row["min"]*16000 - 800):int(row["max"]*16000 + 800)]
+            sf.write(f"examples/synth-{setting['feature']}-{setting['phone']}-{weight}.wav", signal, 16000)
 
             _, spec, _, _, _ = SpecPlotter().compute_spectrogram(signal)
             extent = [0, signal.shape[0] / 16000, 0, 16000 / 2000]
@@ -193,3 +197,4 @@ if __name__ == "__main__":
             if i == 0:
                 axes[i].set_ylabel("Frequency (kHz)")
         plt.savefig(f"plots/main/synth-{setting['feature']}-{setting['phone']}.pdf")
+        plt.savefig(f"examples/synth-{setting['feature']}-{setting['phone']}.png")
