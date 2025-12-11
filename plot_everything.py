@@ -152,6 +152,8 @@ def _plot_model_comparison(dataset, feature_sets, models, sliced, print_sliced=T
         legend_lines = [l1, l2, l3, l4]
         legend_labels = [l.get_label() for l in legend_lines]
 
+        print("success-rates MFCC (audio sliced) baseline", dataset, mfcc_audio_success[feature][0])
+
         if plot_index % 3 == 0:
             axes[plot_index].set_ylabel("Success rate")
         axes[plot_index].set_xlabel("Layer index")
@@ -261,6 +263,7 @@ def _plot_cossim_comparison(dataset, feature_sets):
         if i == 1:
             ax.set_ylim(-0.05, 1.05)
             ax.set_xticks([0, 10, 20])
+            ax.set_yticks([])
             ax.set_xlabel("Layer index")
             ax.set_title("wav2vec 2.0")
 
@@ -349,12 +352,12 @@ if __name__ == "__main__":
         # _plot_success_rates(dataset, feature_count_sets, "pfer")
 
         # _plot_consonant_vowel_comparison(dataset, feature_sets, feature_sets_cons, feature_sets_vowel)
-        # _plot_cossim_comparison(dataset, feature_sets)
-        _plot_synth_scatter(
-            dataset, "wavlm",
-            targets=["vowel-hi", "vowel-lo", "vowel-back", "vowel-round", "consonant-nas", "consonant-son", "consonant-strid", "consonant-voi"],
-            metrics=["F1", "F1", "F2", "F2", "F1BW", "ZCR", "COG", "COG"],
-        )
+        _plot_cossim_comparison(dataset, feature_sets)
+        # _plot_synth_scatter(
+        #     dataset, "wavlm",
+        #     targets=["vowel-hi", "vowel-lo", "vowel-back", "vowel-round", "consonant-nas", "consonant-son", "consonant-strid", "consonant-voi"],
+        #     metrics=["F1", "F1", "F2", "F2", "F1BW", "ZCR", "COG", "COG"],
+        # )
 
         # if dataset == "timit":
         #     _plot_model_comparison(dataset, feature_sets, [

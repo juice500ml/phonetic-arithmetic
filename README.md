@@ -93,8 +93,10 @@ done
 
 ## Extract traditional speech features
 ```bash
+# Use --split both to extract features of both train/test split. It defaults to test.
+
 dataset="timit"
-model="mfcc" # or "melspec"
+model="mfcc" # or "melspec" or "mfcc-vocos" (for synth experiments)
 
 # Feature-slicing
 python3 extract_features.py \
@@ -123,10 +125,10 @@ python3 estimate_similarity.py \
     --dataset timit
 ```
 
-## Synthesize modified audio using
+## Synthesis experiments
 ```bash
-# For synthesizing above demo audios and spectrograms, run:
-python3 plot_synth.py
+# For VoxAngeles, use --synth_model juice500/vocos-wavlm-fleursr
+# For MFCC, use --model mfcc AND --synth_model juice500/vocos-wavlm-libritts or juice500/vocos-wavlm-fleusr AND --feats feats/timit-mfcc-vocos-audioslice.pkl
 
 # Consonants
 feats=(voi strid nas son)
@@ -135,7 +137,7 @@ for i in "${!feats[@]}"; do
   python3 analyze_synth.py --feats feats/timit-wavlm-large-24-featslice.pkl \
     --target_feature $target_feature --fixed_features cons+ \
     --output_path feats/timit-wavlm-synth-consonant-${target_feature}.csv \
-    --device cuda:0 --ssl_model microsoft/wavlm-large \
+    --device cuda:0 --model microsoft/wavlm-large \
     --synth_model juice500/vocos-wavlm-libritts
 done
 
@@ -146,8 +148,14 @@ for i in "${!features2[@]}"; do
   python3 analyze_synth.py --feats feats/timit-wavlm-large-24-featslice.pkl \
     --target_feature $target_feature --fixed_features cons- \
     --output_path feats/timit-wavlm-synth-vowel-${target_feature}.csv \
-    --device cuda:0 --ssl_model microsoft/wavlm-large \
+    --device cuda:0 --model microsoft/wavlm-large \
     --synth_model juice500/vocos-wavlm-libritts
+```
 
-# For VoxAngeles, use juice500/vocos-wavlm-fleursr
+## Plot all figures
+```bash
+python3 plot_everything.py
+
+# For synthesizing above demo audios and spectrograms, run:
+python3 plot_synth.py
 ```

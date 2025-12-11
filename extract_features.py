@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 def _get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", default="microsoft/wavlm-large", help="Huggingface model name")
+    parser.add_argument("--model", default="microsoft/wavlm-large", help="Huggingface model name or spectral feature name")
     parser.add_argument("--dataset_csv", type=Path, help="Dataset to extract features")
     parser.add_argument("--split", default="test", choices=("train", "test", "both"), help="Dataset split to use")
     parser.add_argument("--output_path", type=Path, help="Output pkl path")
@@ -101,6 +101,26 @@ def _infer(x, processor, model, args):
         return outputs.hidden_states[args.layer_index].cpu().detach().numpy()[0]
 
 
+def get_mfcc_vocos():
+    import torch
+    import torchaudio
+    mfcc = torchaudio.transforms.MFCC(
+        sample_rate=24000,
+        n_mfcc=40,
+        log_mels=False,
+        melkwargs={"n_fft": 1024, "hop_length": 256, "n_mels": 100},
+    )
+    def _mfcc(y, n_fft=None):
+        y = torch.from_numpy(y)
+        if len(y) < 514:
+            pad = 514 - len(y)
+            y = torch.nn.functional.pad(y, (pad // 2, pad // 2), mode="constant", value=0)
+        feat = mfcc(y)
+        feat = torch.log(torch.clip(feat, min=1e-7))
+        return feat.numpy()
+    return _mfcc
+
+
 if __name__ == "__main__":
     args = _get_args()
 
@@ -109,16 +129,13 @@ if __name__ == "__main__":
         df = df[df.split == args.split]
 
     print("Extracting features...")
-    if args.model == "melspec" or args.model == "mfcc":
+    if args.model in ("melspec", "mfcc", "mfcc-vocos"):
         feat_func = {
             "melspec": functools.partial(librosa.feature.melspectrogram, sr=args.sr),
             "mfcc": functools.partial(librosa.feature.mfcc, sr=args.sr),
+            "mfcc-vocos": get_mfcc_vocos(),
         }[args.model]
         data = {}
-        for path in tqdm(df.audio_path.unique()):
-            x, _ = librosa.load(path, sr=args.sr, mono=True)
-            data[path] = feat_func(y=x, sr=args.sr).T
-
         if args.slice:
             df["feat"] = None
             for path in tqdm(df.audio_path.unique()):

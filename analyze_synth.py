@@ -46,27 +46,44 @@ def separate_phones(phones, target_name, fixed_features):
 
 
 class ModifyPhone:
-    def __init__(self, ssl_model, synth_model, device="cpu"):
-        self.processor = Wav2Vec2FeatureExtractor.from_pretrained(ssl_model)
-        self.ssl = AutoModel.from_pretrained(ssl_model).to(device)
+    def __init__(self, model, synth_model, device="cpu"):
         self.synth = Vocos.from_pretrained(synth_model).to(device)
         self.device = device
-        self.sr = 16000
-        self.stride = 320
 
-    def modify(self, audio, vec, start, end):
-        inputs = self.processor(
-            raw_speech=[audio],
-            sampling_rate=self.sr,
-            padding=False,
-            return_tensors="pt",
-        )
-        with torch.no_grad():
+        if model in ("mfcc", ):
+            from extract_features import get_mfcc_vocos
+            self.feat_func = get_mfcc_vocos()
+            self.is_ssl = False
+            self.sr = 24000
+            self.stride = 256
+
+            class FeatureExtractor(torch.nn.Module):
+                def forward(self, x):
+                    return x.permute(0, 2, 1)
+            self.synth.feature_extractor = FeatureExtractor()
+        else:
+            self.processor = Wav2Vec2FeatureExtractor.from_pretrained(model)
+            self.ssl = AutoModel.from_pretrained(model).to(device)
+            self.is_ssl = True
+            self.sr = 16000
+            self.stride = 320
+
+    def extract_feats(self, audio):
+        if self.is_ssl:
+            inputs = self.processor(
+                raw_speech=[audio],
+                sampling_rate=self.sr,
+                padding=False,
+                return_tensors="pt",
+            )
             out = self.ssl(**{k: t.to(self.device) for k, t in inputs.items()})
             feats = out.last_hidden_state
-            feats = self.modify_feats(feats, vec, start, end)
-            x_hat = self.synth(feats)
-        return x_hat[0].cpu().numpy()
+        else:
+            feats = self.feat_func(y=audio)
+            feats = torch.from_numpy((feats.T)[None, :, :])
+            feats = feats.to(self.device).to(torch.float32)
+
+        return feats
 
     def modify_feats(self, feats, vec, start, end):
         _, T, _ = feats.shape
@@ -78,6 +95,13 @@ class ModifyPhone:
         vec_tensor = torch.from_numpy(vec).to(feats.device).to(feats.dtype)
         feats[:, start_index:end_index+1, :] += vec_tensor
         return feats
+
+    def modify(self, audio, vec, start, end):
+        with torch.no_grad():
+            feats = self.extract_feats(audio)
+            feats = self.modify_feats(feats, vec, start, end)
+            x_hat = self.synth(feats)
+        return x_hat[0].cpu().numpy()
 
     def load_audio(self, path):
         x, _ = librosa.load(path, sr=self.sr, mono=True)
@@ -139,7 +163,7 @@ def _parse_feature_spec(token):
 
 def _split_train_test(df):
     # TIMIT
-    if len(df.split.unique()) == 2:
+    if df.split.nunique() == 2:
         train_df = df[df.split == "train"]
         test_df = df[df.split == "test"]
 
@@ -171,7 +195,7 @@ def _get_args():
     parser.add_argument("--range_min", type=int, default=-5, help="Minimum lambda value")
     parser.add_argument("--range_max", type=int, default=5, help="Maximum lambda value")
     parser.add_argument("--output_path", type=Path, help="Path to the output file")
-    parser.add_argument("--ssl_model", type=str, default=None, help="Huggingface model name or path to the SSL model")
+    parser.add_argument("--model", type=str, default=None, help="Huggingface model name or path to the SSL model (or 'mfcc' or 'melspec' for baseline)")
     parser.add_argument("--synth_model", type=str, default="juice500/vocos-wavlm-libritts", help="Huggingface model name or path to the vocos model")
     parser.add_argument("--device", type=str, default="cpu", help="Device to use")
     args = parser.parse_args()
@@ -182,7 +206,7 @@ def _get_args():
 if __name__ == "__main__":
     args = _get_args()
 
-    mp = ModifyPhone(ssl_model=args.ssl_model, synth_model=args.synth_model, device=args.device)
+    mp = ModifyPhone(model=args.model, synth_model=args.synth_model, device=args.device)
 
     df = pd.read_pickle(args.feats)
     df_train, df_test = _split_train_test(df)
