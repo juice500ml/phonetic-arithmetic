@@ -347,30 +347,35 @@ if __name__ == "__main__":
         feature_count_sets = _get_feature_count_sets(quadruples)
         feature_sets_cons, feature_sets_vowel = _get_consonant_vowel_feature_sets(feature_sets)
 
-        # _plot_individual_quadruplets(dataset)
-        # _plot_success_rates(dataset, feature_sets, "panphon")
-        # _plot_success_rates(dataset, feature_count_sets, "pfer")
+        _plot_individual_quadruplets(dataset)
+        _plot_success_rates(dataset, feature_sets, "panphon")
+        _plot_success_rates(dataset, feature_count_sets, "pfer")
 
-        # _plot_consonant_vowel_comparison(dataset, feature_sets, feature_sets_cons, feature_sets_vowel)
+        _plot_consonant_vowel_comparison(dataset, feature_sets, feature_sets_cons, feature_sets_vowel)
         _plot_cossim_comparison(dataset, feature_sets)
-        # _plot_synth_scatter(
-        #     dataset, "wavlm",
-        #     targets=["vowel-hi", "vowel-lo", "vowel-back", "vowel-round", "consonant-nas", "consonant-son", "consonant-strid", "consonant-voi"],
-        #     metrics=["F1", "F1", "F2", "F2", "F1BW", "ZCR", "COG", "COG"],
-        # )
+        _plot_synth_scatter(
+            dataset, "wavlm",
+            targets=["vowel-hi", "vowel-lo", "vowel-back", "vowel-round", "consonant-nas", "consonant-son", "consonant-strid", "consonant-voi"],
+            metrics=["F1", "F1", "F2", "F2", "F1BW", "ZCR", "COG", "COG"],
+        )
+        _plot_synth_scatter(
+            dataset, "mfcc",
+            targets=["vowel-hi", "vowel-lo", "vowel-back", "vowel-round", "consonant-nas", "consonant-son", "consonant-strid", "consonant-voi"],
+            metrics=["F1", "F1", "F2", "F2", "F1BW", "ZCR", "COG", "COG"],
+        )
 
-        # if dataset == "timit":
-        #     _plot_model_comparison(dataset, feature_sets, [
-        #         "w2v2-large", "hubert-large", "wavlm-large",
-        #     ], "featslice")
-        #     _plot_model_comparison(dataset, feature_sets, [
-        #         "w2v2-large", "hubert-large", "wavlm-large", 
-        #     ], "audioslice")
-        #     _plot_model_comparison(dataset, feature_sets, [
-        #         "xlsr-53", "w2v2-phoneme", "w2v2-multipa", 
-        #     ], "featslice", name="-PR", print_sliced=False)
-        # else:
-        #     _plot_model_comparison(dataset, feature_sets, [
-        #         "w2v2-large", "hubert-large", "wavlm-large",
-        #     ], "featslice", print_sliced=False)
+        if dataset == "timit":
+            _plot_model_comparison(dataset, feature_sets, [
+                "w2v2-large", "hubert-large", "wavlm-large",
+            ], "featslice")
+            _plot_model_comparison(dataset, feature_sets, [
+                "w2v2-large", "hubert-large", "wavlm-large",
+            ], "audioslice")
+            _plot_model_comparison(dataset, feature_sets, [
+                "xlsr-53", "w2v2-phoneme", "w2v2-multipa",
+            ], "featslice", name="-PR", print_sliced=False)
+        else:
+            _plot_model_comparison(dataset, feature_sets, [
+                "w2v2-large", "hubert-large", "wavlm-large",
+            ], "featslice", print_sliced=False)
 

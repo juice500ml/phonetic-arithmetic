@@ -7,6 +7,7 @@ import scipy.signal
 import scipy.misc
 from pathlib import Path
 import soundfile as sf
+plt.style.use("tableau-colorblind10")
 
 from analyze_synth import ModifyPhone, filter_phones, separate_phones, get_phonological_vector
 
@@ -129,13 +130,24 @@ class SpecPlotter(object):
         return
 
 
+def _get_arrow_xy(xy, direction):
+    dx, dy = {
+        "<": (+0.05, -0.2),
+        ">": (-0.05, -0.2),
+        "^": (0, 2),
+        "v": (-0.002, 2.5),
+        "`": (-0.035, 1.4),
+    }[direction]
+    x, y = xy
+    return (x + dx, y + dy)
+
 
 if __name__ == "__main__":
     df = pd.read_pickle("feats/timit-wavlm-large-24-featslice.pkl")
     df_train = df[df.split == "train"]
     df_test = df[df.split == "test"]
 
-    mp = ModifyPhone(ssl_model="microsoft/wavlm-large", synth_model="juice500/vocos-wavlm-libritts", device="cuda:0")
+    mp = ModifyPhone(model="microsoft/wavlm-large", synth_model="juice500/vocos-wavlm-libritts", device="cuda:0")
     phones = filter_phones(df_test)
 
     settings = [
@@ -144,33 +156,69 @@ if __name__ == "__main__":
             "fixed_features": [("cons", -1)],
             "filename": "TIMIT/TEST/DR1/FAKS0/SA1.WAV",
             "phone": "i",
+            "arrows": [[], [], [], [], [], [], [], []],
         },
         {
             "feature": "round",
             "fixed_features": [("cons", -1)],
             "filename": "TIMIT/TEST/DR1/FAKS0/SA1.WAV",
             "phone": "i",
+            "arrows": [
+                [],
+                [],
+                [],
+                [{"c": "C1", "xy": (0.12, 2.344), "d": "<"}, {"c": "C4", "xy": (0.12, 2.864), "d": "<"}],
+                [{"c": "C1", "xy": (0.12, 2.284), "d": "<"}, {"c": "C4", "xy": (0.12, 2.688), "d": "<"}],
+                [{"c": "C1", "xy": (0.12, 2.006), "d": "<"}, {"c": "C4", "xy": (0.12, 2.322), "d": "<"}],
+                [{"c": "C1", "xy": (0.12, 1.145), "d": "<"}, {"c": "C4", "xy": (0.12, 2.136), "d": "<"}],
+            ]
         },
         {
             "feature": "voi",
             "fixed_features": [("cons", +1)],
             "filename": "TIMIT/TEST/DR1/FAKS0/SI1573.WAV",
             "phone": "b",
+            "arrows": [
+                [{"c": "C1", "xy": (0.14, 0.38), "d": "`"}],
+                [{"c": "C1", "xy": (0.125,0.38), "d": "`"}],
+                [{"c": "C1", "xy": (0.125,0.38), "d": "`"}],
+                [{"c": "C1", "xy": (0.11, 0.38), "d": "`"}],
+                [{"c": "C1", "xy": (0.10, 0.38), "d": "`"}],
+                [{"c": "C1", "xy": (0.06, 0.38), "d": "`"}],
+                [{"c": "C1", "xy": (0.055, 0.38), "d": "`"}],
+            ],
         },
         {
             "feature": "strid",
             "fixed_features": [("cons", +1)],
             "filename": "TIMIT/TEST/DR1/FAKS0/SI1573.WAV",
             "phone": "b",
+            "arrows": [
+                [],
+                [{"c": "C1", "xy": (0.114, 6), "d": "`"}, ],
+                [{"c": "C1", "xy": (0.114, 6), "d": "`"}, ],
+                [{"c": "C1", "xy": (0.114, 6), "d": "`"}, ],
+                [{"c": "C4", "xy": (0.08, 6), "d": ">"}, ],
+                [{"c": "C4", "xy": (0.08, 6), "d": ">"}, ],
+                [{"c": "C4", "xy": (0.08, 6), "d": ">"}, ],
+            ],
         },
         {
             "feature": "nas",
             "fixed_features": [("cons", +1)],
             "filename": "TIMIT/TEST/DR1/FAKS0/SI1573.WAV",
             "phone": "b",
+            "arrows": [
+                [],
+                [],
+                [],
+                [{"c": "C1", "xy": (0.114, 6), "d": "`"}, ],
+                [{"c": "C1", "xy": (0.114, 6), "d": "`"}, {"c": "C4", "xy": (0.1, 0.5), "d": "`"}, ],
+                [{"c": "C4", "xy": (0.06, 0.5), "d": "`"}, ],
+                [{"c": "C4", "xy": (0.08, 2), "d": ">"}, ],
+            ],
         },
     ]
-
 
     Path("plots/main").mkdir(parents=True, exist_ok=True)
     Path("examples").mkdir(parents=True, exist_ok=True)
@@ -183,7 +231,7 @@ if __name__ == "__main__":
         audio = mp.load_audio(row["audio_path"])
         fig, axes = plt.subplots(1, 7, figsize=(14, 2), constrained_layout=True)
 
-        for i, weight in enumerate((-5, -2, -1, 0, 1, 2, 5)):
+        for i, (weight, arrows) in enumerate(zip((-5, -2, -1, 0, 1, 2, 5), setting["arrows"])):
             modified_audio = mp.modify(audio, vec * weight, row["min"], row["max"])
             signal = modified_audio[int(row["min"]*16000 - 800):int(row["max"]*16000 + 800)]
             sf.write(f"examples/synth-{setting['feature']}-{setting['phone']}-{weight}.wav", signal, 16000)
@@ -191,10 +239,17 @@ if __name__ == "__main__":
             _, spec, _, _, _ = SpecPlotter().compute_spectrogram(signal)
             extent = [0, signal.shape[0] / 16000, 0, 16000 / 2000]
             axes[i].imshow(spec, cmap='gist_gray_r', extent=extent, aspect='auto')
-            axes[i].axvline(800/16000)
-            axes[i].axvline(800/16000 + (row["max"] - row["min"]))
+            axes[i].axvline(800/16000, c="C0")
+            axes[i].axvline(800/16000 + (row["max"] - row["min"]), c="C0")
             axes[i].set_title(f"$\\lambda={weight}$")
             if i == 0:
                 axes[i].set_ylabel("Frequency (kHz)")
+
+            for arrow in arrows:
+                axes[i].annotate(
+                    ' ', color=arrow["c"], xy=arrow["xy"], xytext=_get_arrow_xy(arrow["xy"], arrow["d"]),
+                    arrowprops=dict(arrowstyle='-|>', color=arrow["c"], lw=3, mutation_scale=20),
+                )
+
         plt.savefig(f"plots/main/synth-{setting['feature']}-{setting['phone']}.pdf")
         plt.savefig(f"examples/synth-{setting['feature']}-{setting['phone']}.png")
