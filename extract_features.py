@@ -21,7 +21,10 @@ def _get_args():
     parser.add_argument("--pool", default="center", choices=("center", "average", "none"), help="Pooling method")
     parser.add_argument("--slice", action="store_true", help="Slice audio")
     parser.add_argument("--sr", type=int, default=16000, help="Sample rate (default: 16000)")
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    print(args)
+    return args
 
 
 def _slice_feats(row, feats, stride_size, sr):

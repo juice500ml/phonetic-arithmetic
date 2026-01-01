@@ -8,10 +8,12 @@ import pandas as pd
 import argparse
 from pathlib import Path
 import scipy.stats
-
-plt.style.use("tableau-colorblind10")
+from scipy.spatial.distance import cdist
 
 from estimate_similarity import filter_phones, get_quadruples, get_ci
+from analyze_synth import _split_train_test, filter_phones, separate_phones
+
+plt.style.use("tableau-colorblind10")
 
 
 def _get_feature_sets(quadruples):
@@ -60,6 +62,7 @@ def _plot_individual_quadruplets(dataset):
 
             similarities = pickle.load(open(f"feats/similarities-{dataset}-{model}-{slice}.pkl", "rb"))
             for quadruplet, similarity in similarities.items():
+                plt.figure(figsize=(4, 4))
                 for i, metric in enumerate(("arithmetic", "different", "same")):
                     y = np.array([m[metric] for m in similarity])
                     x = list(range(len(y)))
@@ -109,21 +112,23 @@ def _plot_success_rates(dataset, feature_sets, name):
 
             success = _get_success_rates(pickle.load(open(f"feats/similarities-{dataset}-{model}-{slice}.pkl", "rb")), feature_sets)
 
-            fig, axes = plt.subplots(5, 4, figsize=(12, 16))
+            n_rows = (len(success) - 1) // 4 + 1
+            fig, axes = plt.subplots(n_rows, 4, figsize=(12, n_rows * 3))
             axes = axes.flatten()
             for plot_index, (feature, success_rate) in enumerate(success.items()):
                 axes[plot_index].plot(success_rate, "o-")
                 axes[plot_index].set_title(f"{feature} ({len(feature_sets[feature])})")
                 axes[plot_index].set_ylim(-0.05, 1.05)
-                axes[plot_index].axhline(mfcc_success[feature][0], ls="--", c="C1")
-                axes[plot_index].axhline(melspec_success[feature][0], ls="--", c="C2")
-                axes[plot_index].axhline(mfcc_audio_success[feature][0], ls="-", c="C1")
-                axes[plot_index].axhline(melspec_audio_success[feature][0], ls="-", c="C2")
+                axes[plot_index].axhline(mfcc_success[feature][0], ls="--", c="C0")
+                axes[plot_index].axhline(melspec_success[feature][0], ls="--", c="C1")
+                axes[plot_index].axhline(mfcc_audio_success[feature][0], ls="-", c="C0")
+                axes[plot_index].axhline(melspec_audio_success[feature][0], ls="-", c="C1")
             plt.tight_layout()
             plt.savefig(f"plots/success-rates/success-rates-{name}-{dataset}-{model}-{slice}.pdf")
+            plt.close()
 
 
-def _plot_model_comparison(dataset, feature_sets, models, sliced, print_sliced=True, name=""):
+def _plot_model_comparison(dataset, feature_sets, models, sliced, name, print_sliced=True, only_featslice_baselines=False, include_legend=True):
     Path("plots/main").mkdir(parents=True, exist_ok=True)
     mfcc_success, melspec_success, mfcc_audio_success, melspec_audio_success = _get_spectral_baselines(dataset, feature_sets)
 
@@ -141,35 +146,42 @@ def _plot_model_comparison(dataset, feature_sets, models, sliced, print_sliced=T
         if model in ["wavlm-large", "hubert-large", "w2v2-large"]:
             print("success-rates", name, dataset, model, sliced, success["total"].max())
 
-        axes[plot_index].plot(success["total"], ".-", c="C3", label=model_name)
+        axes[plot_index].plot(success["total"], ".-", c="C3")
         axes[plot_index].set_title(f"{model_name} ({sliced_name})" if print_sliced else f"{model_name}")
         axes[plot_index].set_ylim(-0.05, 1.05)
 
-        l1 = axes[plot_index].axhline(mfcc_success[feature][0], ls="--", c="C0", label="MFCC (feat)")
-        l2 = axes[plot_index].axhline(melspec_success[feature][0], ls="--", c="C1", label="MelSpec (feat)")
-        l3 = axes[plot_index].axhline(mfcc_audio_success[feature][0], ls="-",  c="C0", label="MFCC (audio)")
-        l4 = axes[plot_index].axhline(melspec_audio_success[feature][0], ls="-",  c="C1", label="MelSpec (audio)")
-        legend_lines = [l1, l2, l3, l4]
+        l1 = axes[plot_index].axhline(mfcc_success[feature][0], ls="--", c="C0", label="MFCC (feat)" if not only_featslice_baselines else "MFCC")
+        l2 = axes[plot_index].axhline(melspec_success[feature][0], ls="--", c="C1", label="MelSpec (feat)" if not only_featslice_baselines else "MelSpec")
+        if not only_featslice_baselines:
+            l3 = axes[plot_index].axhline(mfcc_audio_success[feature][0], ls="-",  c="C0", label="MFCC (audio)")
+            l4 = axes[plot_index].axhline(melspec_audio_success[feature][0], ls="-",  c="C1", label="MelSpec (audio)")
+        legend_lines = [l1, l2] if only_featslice_baselines else [l1, l2, l3, l4]
         legend_labels = [l.get_label() for l in legend_lines]
 
+        print("success-rates MFCC (feat sliced) baseline", dataset, mfcc_success[feature][0])
+        print("success-rates MelSpec (feat sliced) baseline", dataset, melspec_success[feature][0])
         print("success-rates MFCC (audio sliced) baseline", dataset, mfcc_audio_success[feature][0])
+        print("success-rates MelSpec (audio sliced) baseline", dataset, melspec_audio_success[feature][0])
 
         if plot_index % 3 == 0:
             axes[plot_index].set_ylabel("Success rate")
+            if only_featslice_baselines and include_legend:
+                axes[plot_index].legend(frameon=False, loc="upper left")
         axes[plot_index].set_xlabel("Layer index")
 
-    plt.savefig(f"plots/main/model-comparison{name}-{sliced}-{dataset}.pdf")
+    plt.savefig(f"plots/main/{name}-{dataset}.pdf")
 
-    fig_legend = plt.figure(figsize=(4, 1))
-    fig_legend.legend(
-        legend_lines,
-        legend_labels,
-        ncol=4,
-        frameon=False,
-        loc="center"
-    )
-    fig_legend.canvas.draw()
-    plt.savefig("plots/main/model-comparison-legend.pdf", bbox_inches="tight", pad_inches=0.0)
+    if (not only_featslice_baselines) and include_legend:
+        fig_legend = plt.figure(figsize=(4, 1))
+        fig_legend.legend(
+            legend_lines,
+            legend_labels,
+            ncol=4,
+            frameon=False,
+            loc="center"
+        )
+        fig_legend.canvas.draw()
+        plt.savefig("plots/main/model-comparison-legend.pdf", bbox_inches="tight", pad_inches=0.0)
 
 
 def _get_consonant_vowel_feature_sets(feature_sets):
@@ -185,7 +197,7 @@ def _get_consonant_vowel_feature_sets(feature_sets):
     return feature_sets_cons, feature_sets_vowel
 
 
-def _plot_consonant_vowel_comparison(dataset, f_sets, f_c_sets, f_v_sets, model="wavlm-large", sliced="featslice"):
+def _plot_consonant_vowel_comparison(dataset, f_sets, f_c_sets, f_v_sets, model="wavlm-large", sliced="featslice", include_legend=True):
     Path("plots/main").mkdir(parents=True, exist_ok=True)
 
     fig, axes = plt.subplots(1, 3, figsize=(6, 2), constrained_layout=True)
@@ -201,15 +213,18 @@ def _plot_consonant_vowel_comparison(dataset, f_sets, f_c_sets, f_v_sets, model=
 
         sliced_name = {"featslice": "feat", "audioslice": "audio"}[sliced]
         success = _get_success_rates(pickle.load(open(f"feats/similarities-{dataset}-{model}-{sliced}.pkl", "rb")), feature_sets)
-        axes[plot_index].plot(success["total"], ".-", c="C3", label=model_name)
+        axes[plot_index].plot(success["total"], ".-", c="C3")
         axes[plot_index].set_title(f"{feature_name} ({len(feature_sets[feature])})")
         axes[plot_index].set_ylim(-0.05, 1.05)
-        axes[plot_index].axhline(mfcc_success[feature][0], ls="--", c="C0")
-        axes[plot_index].axhline(melspec_success[feature][0], ls="--", c="C1")
-        axes[plot_index].axhline(mfcc_audio_success[feature][0], ls="-",  c="C0")
-        axes[plot_index].axhline(melspec_audio_success[feature][0], ls="-",  c="C1")
+
+        axes[plot_index].axhline(mfcc_success[feature][0], ls="--", c="C0", label="MFCC")
+        axes[plot_index].axhline(melspec_success[feature][0], ls="--", c="C1", label="MelSpec")
+        # axes[plot_index].axhline(mfcc_audio_success[feature][0], ls="-",  c="C0")
+        # axes[plot_index].axhline(melspec_audio_success[feature][0], ls="-",  c="C1")
         if plot_index % 3 == 0:
             axes[plot_index].set_ylabel("Success rate")
+            if include_legend:
+                axes[plot_index].legend(frameon=False, loc="upper left")
         axes[plot_index].set_xlabel("Layer index")
 
     plt.savefig(f"plots/main/phone-comparison-{dataset}-{model}-{sliced}.pdf")
@@ -325,20 +340,216 @@ def _plot_synth_scatter(dataset, model, targets, metrics):
             x = x[~np.isnan(y)]
             y = y[~np.isnan(y)]
             stats = scipy.stats.spearmanr(x, y)
-        
-            if metric != "ZCR":
+
+            if metric == "ZCR":
+                y *= 100
+                axes[i][j].set_ylabel(f"Δ {metric} (%)")
+            elif metric == "HNR":
+                axes[i][j].set_ylabel(f"Δ {metric} (dB)")
+            else:
                 y /= 1000
                 axes[i][j].set_ylabel(f"Δ {metric} (kHz)")
-            else:
-                axes[i][j].set_ylabel(f"Δ {metric} (\%)")
 
             axes[i][j].set_xlabel(r"$\lambda$")
-            axes[i][j].scatter(x, y, color="C0" if cv == "vowel" else "C1", s=0.2)
+            axes[i][j].scatter(x, y, color="C0" if cv == "vowel" else "C1", s=0.2, rasterized=True)
             axes[i][j].set_title(f"{title}\n$\\rho=${stats.statistic:.3f}")
 
     plt.savefig(f"plots/main/synth-scatter-{dataset}-{model}.pdf")
 
+
+def _plot_synth_density(dataset, model, targets, metrics):
+    assert len(targets) == len(metrics)
+
+    Path("plots/main").mkdir(parents=True, exist_ok=True)
+
+    fig, axes = plt.subplots(
+        2, len(targets),
+        figsize=(16, 4), constrained_layout=True,
+    )
+    for j, (target, metric) in enumerate(zip(targets, metrics)):
+        df = pd.read_csv(f"feats/{dataset}-{model}-synth-{target}.csv")
+        cv, pp = target.split("-")
+
+        for i in range(2):
+            if i == 0:
+                _df = df[df.is_positive_phone]
+            else:
+                _df = df[~df.is_positive_phone]
+                axes[i][j].sharey(axes[i-1][j])
+
+            y = _df[f"synth_{metric}"] - _df[f"original_{metric}"]
+            y = y[~np.isnan(y)]
+
+            y_mod = _df[f"modified_{metric}"] - _df[f"original_{metric}"]
+            y_mod = y_mod[~np.isnan(y_mod)]
+
+            if metric == "ZCR":
+                y *= 100
+                y_mod *= 100
+                title = f"Δ {metric} (%)"
+            elif metric == "HNR":
+                title = f"Δ {metric} (dB)"
+            else:
+                y /= 1000
+                y_mod /= 1000
+                title = f"Δ {metric} (kHz)"
+
+            axes[i][j].hist(y, color="C0" if cv == "vowel" else "C1", range=(y_mod.min(), y_mod.max()), bins=40, density=True)
+            axes[i][j].set_ylabel("Density")
+            axes[i][j].set_title(f"{title}")
+
+    plt.savefig(f"plots/main/synth-density-{dataset}-{model}.pdf")
+
+
+def _plot_cos_density(feats, sample_phon_vectors, avg_phon_vectors, counts, dataset, phone_phon_vectors=None):
+    show_phonewise = True if phone_phon_vectors is not None else False
+
+    fig, axes = plt.subplots(
+        1, 8,
+        figsize=(14, 2.4),
+        constrained_layout=True,
+        sharey=True,
+    )
+    axes = axes.flatten()
+
+    for ax, feat in zip(axes, feats):
+        for i, count in enumerate(counts):
+            dists = cdist(sample_phon_vectors[count][feat], avg_phon_vectors[feat][np.newaxis, :], metric="cosine")
+            kwargs = dict(histtype="step", alpha=0.7) if show_phonewise else dict(alpha=0.5)
+            ax.hist(1.0 - dists, range=(-0.2, 1), bins=50, density=True, label=str(count), **kwargs)
+
+        if show_phonewise:
+            dists = cdist(phone_phon_vectors[feat], avg_phon_vectors[feat][np.newaxis, :], metric="cosine")
+            ax.hist(1.0 - dists, range=(-0.2, 1), bins=50, density=True, alpha=0.8, label="Phone pair")
+
+        if feat == feats[0]:
+            ax.legend(frameon=False)
+            ax.set_ylabel("Density")
+            ax.set_xlabel("Cosine similarity")
+        ax.set_title(feat)
+    plt.savefig(f"plots/main/phonovector-{dataset}-density-{show_phonewise}.pdf")
+
+
+def _plot_cos_matrix(feats, avg_phon_vectors, dataset):
+    matrix = np.zeros((len(feats), len(feats)))
+
+    for i in range(len(feats)):
+        for j in range(i, len(feats)):
+            # samplewise vs. whole
+            # dists = cdist(avg_phon_vectors[feats[i]][np.newaxis, :], sample_phon_vectors[feats[j]], metric="cosine")
+            # phonewise vs whole
+            # dists = cdist(avg_phon_vectors[feats[i]][np.newaxis, :], phone_phon_vectors[feats[j]], metric="cosine")
+            # whole vs whole
+            dists = cdist(avg_phon_vectors[feats[i]][np.newaxis, :], avg_phon_vectors[feats[j]][np.newaxis, :], metric="cosine")
+
+            matrix[i, j] = matrix[j, i] = (1.0 - dists).mean()
+
+    fig, ax = plt.subplots(figsize=(6, 5))
+    im = ax.imshow(matrix, cmap=plt.cm.PuOr, vmin=-1, vmax=1)
+
+    ax.set_xticks(range(len(feats)))
+    ax.set_yticks(range(len(feats)))
+    ax.set_xticklabels(feats)
+    ax.set_yticklabels(feats)
+    ax.set_title("Phonological Vector Comparison")
+    for i in range(matrix.shape[0]):
+        for j in range(matrix.shape[1]):
+            color = "white" if abs(matrix[i, j]) > 0.5 else "black"
+            ax.text(j, i, f"{matrix[i, j]:.2f}",
+                    ha="center", va="center",
+                    color=color, fontsize=9)
+
+    plt.colorbar(im, ax=ax)
+    plt.tight_layout()
+    plt.savefig(f"plots/main/phonovector-{dataset}-matrix.pdf")
+
+
+def _plot_phonological_vector_analysis(dataset):
+    df = pd.read_pickle(f"feats/{dataset}-wavlm-large-24-featslice.pkl")
+    df_train, df_test = _split_train_test(df)
+    phones = filter_phones(df_test)
+
+    cases = [
+        ("hi", [("cons", -1)]),
+        ("lo", [("cons", -1)]),
+        ("back", [("cons", -1)]),
+        ("round", [("cons", -1)]),
+        ("nas", [("cons", 1)]),
+        ("son", [("cons", 1)]),
+        ("strid", [("cons", 1)]),
+        ("voi", [("cons", 1)]),
+    ]
+
+    pos_neg_phones = {
+        feat: separate_phones(phones, feat, constraints)
+        for feat, constraints in cases
+    }
+
+    # Calculate various types of phonological vectors
+    avg_phon_vectors = {}
+    phone_phon_vectors = {}
+    phone_phon_dists = {}
+
+    counts = (1, 4, 16, 64, 256)
+    sample_phon_vectors = {count: {} for count in counts}
+
+    rng = np.random.default_rng(42)
+    sample_size = 1000
+
+    for feat, (pos_phones, neg_phones) in tqdm(pos_neg_phones.items()):
+        df_pos = df_train[df_train.ipa.isin(pos_phones)]
+        df_neg = df_train[df_train.ipa.isin(neg_phones)]
+
+        pos = np.stack(df_pos.feat.tolist())
+        neg = np.stack(df_neg.feat.tolist())
+
+        # Average phonological vector (ours)
+        avg_phon_vectors[feat] = pos.mean(0) - neg.mean(0)
+
+        # Phonewise phonological vectors
+        vecs, dists = [], []
+        phnwise_avg = {}
+        for phn in (pos_phones | neg_phones):
+            _df = df_train[df_train.ipa == phn]
+            if len(_df) > 0:
+                phnwise_avg[phn] = np.stack(_df.feat.tolist()).mean(0)
+        for pos_phn in pos_phones:
+            for neg_phn in neg_phones:
+                if pos_phn in phnwise_avg and neg_phn in phnwise_avg:
+                    vecs.append(phnwise_avg[pos_phn] - phnwise_avg[neg_phn])
+                    # dists.append((_get_feat_arr(pos_phn) != _get_feat_arr(neg_phn)).sum())
+        phone_phon_vectors[feat] = np.array(vecs)
+        # phone_phon_dists[feat] = dists
+
+        # Samplewise phonological vectors
+        for count in counts:
+            pos_indices = rng.choice(len(pos), size=sample_size * count, replace=True)
+            neg_indices = rng.choice(len(neg), size=sample_size * count, replace=True)
+            feats = pos[pos_indices] - neg[neg_indices]
+            if count == 1:
+                sample_phon_vectors[count][feat] = feats
+            else:
+                sample_phon_vectors[count][feat] = feats.reshape(sample_size, count, -1).mean(axis=1)
+
+    # Plot cos density plots
+    _plot_cos_density(list(pos_neg_phones.keys()), sample_phon_vectors, avg_phon_vectors, counts, dataset)
+    _plot_cos_density(list(pos_neg_phones.keys()), sample_phon_vectors, avg_phon_vectors, counts, dataset, phone_phon_vectors)
+
+    # Plot cos matrix
+    _plot_cos_matrix(list(pos_neg_phones.keys()), avg_phon_vectors, dataset)
+
+
 if __name__ == "__main__":
+    # Dataset comparison
+    timit_phs = filter_phones(pd.read_csv(f"feats/timit.csv"))
+    voxangeles_quads = get_quadruples(filter_phones(pd.read_csv(f"feats/voxangeles.csv")))
+    print(len(voxangeles_quads), "voxangeles quadruples")
+    print(len([
+        quad for quad in voxangeles_quads
+        if any(ph not in timit_phs for ph in quad)
+    ]), "voxangeles quadruples where unseen phone (timit) exist")
+
+    # Plots
     for dataset in ["timit", "voxangeles"]:
         phones = filter_phones(pd.read_csv(f"feats/{dataset}.csv"))
         quadruples = get_quadruples(phones)
@@ -349,33 +560,45 @@ if __name__ == "__main__":
 
         _plot_individual_quadruplets(dataset)
         _plot_success_rates(dataset, feature_sets, "panphon")
+        _plot_success_rates(dataset, feature_sets_cons, "panphon-cons")
+        _plot_success_rates(dataset, feature_sets_vowel, "panphon-vowel")
         _plot_success_rates(dataset, feature_count_sets, "pfer")
 
-        _plot_consonant_vowel_comparison(dataset, feature_sets, feature_sets_cons, feature_sets_vowel)
+        _plot_model_comparison(dataset, feature_sets, [
+            "w2v2-large", "hubert-large", "wavlm-large",
+        ], "featslice", name="model-comparison", print_sliced=False, only_featslice_baselines=True, include_legend=(dataset == "timit"))
+        _plot_model_comparison(dataset, feature_sets, [
+            "w2v2-large", "hubert-large", "wavlm-large",
+        ], "featslice", name="model-comparison-full-featslice")
+        _plot_consonant_vowel_comparison(dataset, feature_sets, feature_sets_cons, feature_sets_vowel, include_legend=(dataset == "timit"))
         _plot_cossim_comparison(dataset, feature_sets)
         _plot_synth_scatter(
             dataset, "wavlm",
             targets=["vowel-hi", "vowel-lo", "vowel-back", "vowel-round", "consonant-nas", "consonant-son", "consonant-strid", "consonant-voi"],
-            metrics=["F1", "F1", "F2", "F2", "F1BW", "ZCR", "COG", "COG"],
+            metrics=["F1", "F1", "F2", "F2", "F1BW", "HNR", "COG", "COG"],
+        )
+        _plot_synth_density(
+            dataset, "wavlm",
+            targets=["vowel-hi", "vowel-lo", "vowel-back", "vowel-round", "consonant-nas", "consonant-son", "consonant-strid", "consonant-voi"],
+            metrics=["F1", "F1", "F2", "F2", "F1BW", "HNR", "COG", "COG"],
         )
         _plot_synth_scatter(
             dataset, "mfcc",
             targets=["vowel-hi", "vowel-lo", "vowel-back", "vowel-round", "consonant-nas", "consonant-son", "consonant-strid", "consonant-voi"],
-            metrics=["F1", "F1", "F2", "F2", "F1BW", "ZCR", "COG", "COG"],
+            metrics=["F1", "F1", "F2", "F2", "F1BW", "HNR", "COG", "COG"],
+        )
+        _plot_synth_scatter(
+            dataset, "mfcc-featslice",
+            targets=["vowel-hi", "vowel-lo", "vowel-back", "vowel-round", "consonant-nas", "consonant-son", "consonant-strid", "consonant-voi"],
+            metrics=["F1", "F1", "F2", "F2", "F1BW", "HNR", "COG", "COG"],
         )
 
         if dataset == "timit":
             _plot_model_comparison(dataset, feature_sets, [
                 "w2v2-large", "hubert-large", "wavlm-large",
-            ], "featslice")
-            _plot_model_comparison(dataset, feature_sets, [
-                "w2v2-large", "hubert-large", "wavlm-large",
-            ], "audioslice")
+            ], "audioslice", name="model-comparison-full-audioslice")
             _plot_model_comparison(dataset, feature_sets, [
                 "xlsr-53", "w2v2-phoneme", "w2v2-multipa",
-            ], "featslice", name="-PR", print_sliced=False)
-        else:
-            _plot_model_comparison(dataset, feature_sets, [
-                "w2v2-large", "hubert-large", "wavlm-large",
-            ], "featslice", print_sliced=False)
+            ], "featslice", name="model-comparison-pr", print_sliced=False)
 
+        _plot_phonological_vector_analysis(dataset)
