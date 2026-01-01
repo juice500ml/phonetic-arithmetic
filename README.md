@@ -126,6 +126,8 @@ python3 estimate_similarity.py \
 ```
 
 ## Synthesis experiments
+To train the vocoder, refer to: https://github.com/juice500ml/vocos/tree/wavlm
+
 ```bash
 # For VoxAngeles, use --synth_model juice500/vocos-wavlm-fleursr
 # For MFCC, use --model mfcc AND --synth_model juice500/vocos-wavlm-libritts or juice500/vocos-wavlm-fleusr AND --feats feats/timit-mfcc-vocos-audioslice.pkl
