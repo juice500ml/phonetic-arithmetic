@@ -1,5 +1,9 @@
 # phonetic-arithmetic
 
+## Interactive Demo
+Will be released after paper acceptance.
+
+
 ## Synthesis Examples
 
 ### Applying height vector to phone [i]
