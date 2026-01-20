@@ -43,8 +43,11 @@
 micromamba install -y python=3.10 pytorch pytorch-cuda=12.* -c pytorch -c nvidia -c conda-forge
 pip install transformers==4.35.0 pandas>2 librosa>0.10 numpy==1.23.5 datasets praatio panphon scipy tqdm praat-parselmouth
 
-# For synthesis experiments
+# For training synthesis experiments (scale experiments)
 pip install git+https://github.com/juice500ml/vocos.git@wavlm
+
+# For synthesizing datasets
+pip install numpy==1.26 coqui-tts
 ```
 
 ## Prepare dataset
