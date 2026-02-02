@@ -130,9 +130,13 @@ def process_quadruplet(df, quadruplet):
 def parse_args():
     parser = argparse.ArgumentParser(description="Compute synthesis distances over layers")
     parser.add_argument(
-        "--dataset",
-        choices=["timit", "voxangeles", ],
+        "--dataset_name",
+        default=None,
+    )
+    parser.add_argument(
+        "--dataset_csv",
         required=True,
+        type=Path,
     )
     parser.add_argument(
         "--model",
@@ -141,29 +145,43 @@ def parse_args():
     )
     parser.add_argument(
         "--slice",
-        choices=["audioslice", "featslice"],
         required=True,
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "--target_col",
+        default="ipa",
+    )
+    args = parser.parse_args()
+
+    if args.dataset_name is None:
+        args.dataset_name = args.dataset_csv.stem
+
+    return args
 
 
 if __name__ == '__main__':
     args = parse_args()
     print(args)
 
-    phones = filter_phones(pd.read_csv(f"feats/{args.dataset}.csv"))
+    df = pd.read_csv(args.dataset_csv)
+    if args.target_col != "ipa":
+        df["ipa"] = df[args.target_col]
+
+    phones = filter_phones(df)
     quadruples = get_quadruples(phones)
 
     results = {q: [] for q in quadruples}
     for layer in tqdm(range(25)):
-        inpath = f"feats/{args.dataset}-{args.model}-{layer}-{args.slice}.pkl"
+        inpath = f"feats/{args.dataset_name}-{args.model}-{layer}-{args.slice}.pkl"
         if not Path(inpath).exists():
             print(f"{inpath} does not exist, breaking.")
             break
 
         df = pd.read_pickle(inpath)
-        df.feat = df.feat.apply(normalize)
+        if args.target_col != "ipa":
+            df["ipa"] = df[args.target_col]
         df = df[df.ipa.isin(phones) & (df.split == "test")].reset_index(drop=True).copy()
+        df.feat = df.feat.apply(normalize)
 
         _process = partial(process_quadruplet, df)
         ctx = mp.get_context("fork")
@@ -171,6 +189,8 @@ if __name__ == '__main__':
             for q, result_dict in pool.imap_unordered(_process, quadruples):
                 results[q].append(result_dict)
 
-    outname = f"feats/similarities-{args.dataset}-{args.model}-{args.slice}.pkl"
+    outname = f"feats/similarities-{args.dataset_name}-{args.model}-{args.slice}.pkl"
+    if args.target_col != "ipa":
+        outname = outname.replace(".pkl", f"-{args.target_col}.pkl")
     with open(outname, "wb") as f:
         pickle.dump(results, f)

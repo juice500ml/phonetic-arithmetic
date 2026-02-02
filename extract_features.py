@@ -18,7 +18,7 @@ def _get_args():
     parser.add_argument("--output_path", type=Path, help="Output pkl path")
     parser.add_argument("--device", default="cpu", help="Device to infer, cpu or cuda:0 (gpu)")
     parser.add_argument("--layer_index", type=int, help="Layer index", default=-1)
-    parser.add_argument("--pool", default="center", choices=("center", "average", "none"), help="Pooling method")
+    parser.add_argument("--pool", default="average", choices=("center", "average", "1q", "2q", "4q", "5q", "none", "random"), help="Pooling method")
     parser.add_argument("--slice", action="store_true", help="Slice audio")
     parser.add_argument("--sr", type=int, default=16000, help="Sample rate (default: 16000)")
     args = parser.parse_args()
@@ -40,8 +40,19 @@ def _slice_feats(row, feats, stride_size, sr):
 def _pool_feats(row, pool):
     if pool == "center":
         return row.feat[int(len(row.feat) / 2)]
+    elif pool == "1q":
+        return row.feat[0]
+    elif pool == "2q":
+        return row.feat[int(len(row.feat) / 4)]
+    elif pool == "4q":
+        return row.feat[int(len(row.feat) * 3 / 4)]
+    elif pool == "5q":
+        return row.feat[-1]
     elif pool == "average":
         return row.feat.mean(0)
+    elif pool == "random":
+        index = np.random.randint(0, len(row.feat))
+        return row.feat[index], index, len(row.feat)
     elif pool == "none":
         return row.feat
     else:
@@ -126,8 +137,11 @@ def get_mfcc_vocos():
 
 if __name__ == "__main__":
     args = _get_args()
+    np.random.seed(42)
 
     df = pd.read_csv(args.dataset_csv)
+    # if not Path(df.iloc[0].audio_path).is_absolute():
+    #     df.audio_path = df.audio_path.apply(lambda x: str(Path(args.dataset_csv.parent) / x))
     if args.split != "both":
         df = df[df.split == args.split]
 
@@ -172,4 +186,10 @@ if __name__ == "__main__":
             df["feat"] = df.apply(functools.partial(_slice_feats, feats=data, stride_size=_get_stride_size(args.model), sr=args.sr), axis=1)
 
     df["feat"] = df.apply(functools.partial(_pool_feats, pool=args.pool), axis=1)
+
+    if args.pool == "random":
+        df["feat_index"] = df["feat"].apply(lambda x: x[1])
+        df["feat_length"] = df["feat"].apply(lambda x: x[2])
+        df["feat"] = df["feat"].apply(lambda x: x[0])
+
     df.to_pickle(args.output_path)

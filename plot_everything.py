@@ -93,12 +93,19 @@ def _get_success_rates(similarities, feature_sets):
     return successes
 
 
-def _get_spectral_baselines(dataset, feature_sets):
-    mfcc_success = _get_success_rates(pickle.load(open(f"feats/similarities-{dataset}-mfcc-featslice.pkl", "rb")), feature_sets)
-    melspec_success = _get_success_rates(pickle.load(open(f"feats/similarities-{dataset}-melspec-featslice.pkl", "rb")), feature_sets)
-    mfcc_audio_success = _get_success_rates(pickle.load(open(f"feats/similarities-{dataset}-mfcc-audioslice.pkl", "rb")), feature_sets)
-    melspec_audio_success = _get_success_rates(pickle.load(open(f"feats/similarities-{dataset}-melspec-audioslice.pkl", "rb")), feature_sets)
-    return mfcc_success, melspec_success, mfcc_audio_success, melspec_audio_success
+def _get_spectral_baselines(dataset, feature_sets, prefix="", postfix=""):
+    successes = []
+
+    for slice_type in ("featslice", "audioslice"):
+        for model_name in ("mfcc", "melspec"):
+            fname = f"feats/similarities-{dataset}-{model_name}-{prefix}{slice_type}{postfix}.pkl"
+            if not Path(fname).exists():
+                print(f"Similarities for {fname} do not exist, skipping.")
+                success = None
+            else:
+                success = _get_success_rates(pickle.load(open(fname, "rb")), feature_sets)
+            successes.append(success)
+    return tuple(successes)
 
 
 def _plot_success_rates(dataset, feature_sets, name):
@@ -106,11 +113,12 @@ def _plot_success_rates(dataset, feature_sets, name):
     mfcc_success, melspec_success, mfcc_audio_success, melspec_audio_success = _get_spectral_baselines(dataset, feature_sets)
     for model in tqdm(["hubert-large", "w2v2-large", "w2v2-phoneme", "w2v2-multipa", "xlsr-53", "wavlm-large"]):
         for slice in ["featslice", "audioslice"]:
-            if not Path(f"feats/similarities-{dataset}-{model}-{slice}.pkl").exists():
-                print(f"Similarities for {dataset}-{model}-{slice} do not exist, skipping.")
+            fname = f"feats/similarities-{dataset}-{model}-{slice}.pkl"
+            if not Path(fname).exists():
+                print(f"Similarities for {fname} do not exist, skipping.")
                 continue
 
-            success = _get_success_rates(pickle.load(open(f"feats/similarities-{dataset}-{model}-{slice}.pkl", "rb")), feature_sets)
+            success = _get_success_rates(pickle.load(open(fname, "rb")), feature_sets)
 
             n_rows = (len(success) - 1) // 4 + 1
             fig, axes = plt.subplots(n_rows, 4, figsize=(12, n_rows * 3))
@@ -126,6 +134,45 @@ def _plot_success_rates(dataset, feature_sets, name):
             plt.tight_layout()
             plt.savefig(f"plots/success-rates/success-rates-{name}-{dataset}-{model}-{slice}.pdf")
             plt.close()
+
+def _plot_success_rates_with_target_col(dataset, feature_sets, model_name, pool, name):
+    Path("plots/contextual").mkdir(parents=True, exist_ok=True)
+
+    fig, axes = plt.subplots(1, 3, figsize=(6, 2), constrained_layout=True)
+    feature = "total"
+    for plot_index, target_col in enumerate(("start_phone", "middle_phone", "end_phone")):
+        fname = f"feats/similarities-{dataset}-{model_name}-{pool}-featslice-{target_col}.pkl"
+        mfcc_success, melspec_success, mfcc_audio_success, melspec_audio_success = _get_spectral_baselines(dataset, feature_sets, prefix=f"{pool}-", postfix=f"-{target_col}")
+        success = _get_success_rates(pickle.load(open(fname, "rb")), feature_sets)
+
+        axes[plot_index].plot(success[feature], ".-", c="C3")
+        axes[plot_index].set_title(f"{target_col}")
+        axes[plot_index].set_ylim(-0.05, 1.05)
+
+        l1 = axes[plot_index].axhline(mfcc_success[feature][0], ls="--", c="C0", label="MFCC")
+        l2 = axes[plot_index].axhline(melspec_success[feature][0], ls="--", c="C1", label="MelSpec")
+        legend_lines = [l1, l2]
+        legend_labels = [l.get_label() for l in legend_lines]
+
+        if plot_index % 3 == 0:
+            axes[plot_index].set_ylabel("Success rate")
+            axes[plot_index].legend(frameon=False, loc="upper left")
+        axes[plot_index].set_xlabel("Layer index")
+
+    fig.suptitle(f"{model_name} {pool}")
+    plt.savefig(f"plots/contextual/{name}-{dataset}-{model_name}-{pool}.pdf")
+    plt.close()
+
+    fig_legend = plt.figure(figsize=(4, 1))
+    fig_legend.legend(
+        legend_lines,
+        legend_labels,
+        ncol=2,
+        frameon=False,
+        loc="center"
+    )
+    fig_legend.canvas.draw()
+    plt.savefig("plots/contextual/model-comparison-legend.pdf", bbox_inches="tight", pad_inches=0.0)
 
 
 def _plot_model_comparison(dataset, feature_sets, models, sliced, name, print_sliced=True, only_featslice_baselines=False, include_legend=True):
@@ -197,8 +244,8 @@ def _get_consonant_vowel_feature_sets(feature_sets):
     return feature_sets_cons, feature_sets_vowel
 
 
-def _plot_consonant_vowel_comparison(dataset, f_sets, f_c_sets, f_v_sets, model="wavlm-large", sliced="featslice", include_legend=True):
-    Path("plots/main").mkdir(parents=True, exist_ok=True)
+def _plot_consonant_vowel_comparison(dataset, f_sets, f_c_sets, f_v_sets, model="wavlm-large", sliced="featslice", include_legend=True, path="main"):
+    Path(f"plots/{path}").mkdir(parents=True, exist_ok=True)
 
     fig, axes = plt.subplots(1, 3, figsize=(6, 2), constrained_layout=True)
     axes = axes.flatten()
@@ -209,9 +256,12 @@ def _plot_consonant_vowel_comparison(dataset, f_sets, f_c_sets, f_v_sets, model=
     }[model]
 
     for plot_index, (feature_name, feature_sets) in enumerate(zip((f"Total", "Consonants", "Vowels"), [f_sets, f_c_sets, f_v_sets])):
-        mfcc_success, melspec_success, mfcc_audio_success, melspec_audio_success = _get_spectral_baselines(dataset, feature_sets)
+        if path == "contextual":
+            pool, _, target_col = sliced.split("-")
+            mfcc_success, melspec_success, mfcc_audio_success, melspec_audio_success = _get_spectral_baselines(dataset, feature_sets, prefix=f"{pool}-", postfix=f"-{target_col}")
+        else:
+            mfcc_success, melspec_success, mfcc_audio_success, melspec_audio_success = _get_spectral_baselines(dataset, feature_sets)
 
-        sliced_name = {"featslice": "feat", "audioslice": "audio"}[sliced]
         success = _get_success_rates(pickle.load(open(f"feats/similarities-{dataset}-{model}-{sliced}.pkl", "rb")), feature_sets)
         axes[plot_index].plot(success["total"], ".-", c="C3")
         axes[plot_index].set_title(f"{feature_name} ({len(feature_sets[feature])})")
@@ -227,7 +277,9 @@ def _plot_consonant_vowel_comparison(dataset, f_sets, f_c_sets, f_v_sets, model=
                 axes[plot_index].legend(frameon=False, loc="upper left")
         axes[plot_index].set_xlabel("Layer index")
 
-    plt.savefig(f"plots/main/phone-comparison-{dataset}-{model}-{sliced}.pdf")
+    if path == "contextual":
+        fig.suptitle(f"{model_name} {sliced}")
+    plt.savefig(f"plots/{path}/phone-comparison-{dataset}-{model}-{sliced}.pdf")
 
 
 def _get_avgcos(similarities, feature_sets):
@@ -430,7 +482,7 @@ def _plot_cos_density(feats, sample_phon_vectors, avg_phon_vectors, counts, data
     plt.savefig(f"plots/main/phonovector-{dataset}-density-{show_phonewise}.pdf")
 
 
-def _plot_cos_matrix(feats, avg_phon_vectors, dataset):
+def _plot_cos_matrix(feats, avg_phon_vectors, dataset, path="main"):
     matrix = np.zeros((len(feats), len(feats)))
 
     for i in range(len(feats)):
@@ -444,12 +496,18 @@ def _plot_cos_matrix(feats, avg_phon_vectors, dataset):
 
             matrix[i, j] = matrix[j, i] = (1.0 - dists).mean()
 
-    fig, ax = plt.subplots(figsize=(6, 5))
+    if path == "contextual":
+        fig, ax = plt.subplots(figsize=(12, 10))
+    else:
+        fig, ax = plt.subplots(figsize=(6, 5))
     im = ax.imshow(matrix, cmap=plt.cm.PuOr, vmin=-1, vmax=1)
 
     ax.set_xticks(range(len(feats)))
     ax.set_yticks(range(len(feats)))
-    ax.set_xticklabels(feats)
+    if path == "contextual":
+        ax.set_xticklabels(feats, rotation=45, ha="right")
+    else:
+        ax.set_xticklabels(feats)
     ax.set_yticklabels(feats)
     ax.set_title("Phonological Vector Comparison")
     for i in range(matrix.shape[0]):
@@ -461,7 +519,7 @@ def _plot_cos_matrix(feats, avg_phon_vectors, dataset):
 
     plt.colorbar(im, ax=ax)
     plt.tight_layout()
-    plt.savefig(f"plots/main/phonovector-{dataset}-matrix.pdf")
+    plt.savefig(f"plots/{path}/phonovector-{dataset}-matrix.pdf")
 
 
 def _plot_phonological_vector_analysis(dataset):
@@ -517,9 +575,7 @@ def _plot_phonological_vector_analysis(dataset):
             for neg_phn in neg_phones:
                 if pos_phn in phnwise_avg and neg_phn in phnwise_avg:
                     vecs.append(phnwise_avg[pos_phn] - phnwise_avg[neg_phn])
-                    # dists.append((_get_feat_arr(pos_phn) != _get_feat_arr(neg_phn)).sum())
         phone_phon_vectors[feat] = np.array(vecs)
-        # phone_phon_dists[feat] = dists
 
         # Samplewise phonological vectors
         for count in counts:
@@ -539,66 +595,257 @@ def _plot_phonological_vector_analysis(dataset):
     _plot_cos_matrix(list(pos_neg_phones.keys()), avg_phon_vectors, dataset)
 
 
-if __name__ == "__main__":
-    # Dataset comparison
-    timit_phs = filter_phones(pd.read_csv(f"feats/timit.csv"))
-    voxangeles_quads = get_quadruples(filter_phones(pd.read_csv(f"feats/voxangeles.csv")))
-    print(len(voxangeles_quads), "voxangeles quadruples")
-    print(len([
-        quad for quad in voxangeles_quads
-        if any(ph not in timit_phs for ph in quad)
-    ]), "voxangeles quadruples where unseen phone (timit) exist")
+def _plot_contextual_vector_analysis(dataset, model, phones, locations=["l_1", "ipa", "r_1"]):
+    column_name = {"ipa": "0"}
+    for i in range(5):
+        column_name[f"l_{i}"] = f"-{i}"
+        column_name[f"r_{i}"] = f"+{i}"
 
-    # Plots
+    df = pd.read_pickle(f"feats/{dataset}-{model}-center-featslice.pkl")
+
+    cases = [
+        ("hi", [("cons", -1)]),
+        ("lo", [("cons", -1)]),
+        ("back", [("cons", -1)]),
+        ("round", [("cons", -1)]),
+        ("nas", [("cons", 1)]),
+        ("son", [("cons", 1)]),
+        ("strid", [("cons", 1)]),
+        ("voi", [("cons", 1)]),
+    ]
+
+    pos_neg_phones = {
+        feat: separate_phones(phones, feat, constraints)
+        for feat, constraints in cases
+    }
+
+    # Calculate various types of phonological vectors
+    avg_phon_vectors = {}
+
+    for col in locations:
+        for feat, (pos_phones, neg_phones) in tqdm(pos_neg_phones.items()):
+            df_pos = df[df[col].isin(pos_phones)]
+            df_neg = df[df[col].isin(neg_phones)]
+
+            pos = np.stack(df_pos.feat.tolist())
+            neg = np.stack(df_neg.feat.tolist())
+
+            # Average phonological vector (ours)
+            avg_phon_vectors[f"{feat} ({column_name[col]})"] = pos.mean(0) - neg.mean(0)
+
+    # Plot cos matrix
+    _plot_cos_matrix(list(avg_phon_vectors.keys()), avg_phon_vectors, dataset, path="contextual")
+
+
+def _plot_masked_similarity(models, dataset="timit", bootstrapping=1000):
+    Path("plots/contextual").mkdir(parents=True, exist_ok=True)
+
+    fig, axes = plt.subplots(1, len(models), figsize=(5, 2), sharey=True)
+    for ax, model in zip(axes, models):
+        df = pd.read_pickle(f"feats/{dataset}-{model}-masking-similarity.pkl")
+        model_name = {
+            "wavlm-large": "WavLM", "hubert-large": "HuBERT", "w2v2-large": "wav2vec 2.0",
+        }[model]
+
+        values = []
+        num_layers = len(df.cos.iloc[0])
+        for layer in tqdm(range(num_layers)):
+            mean = np.concatenate(df.cos.apply(lambda x: x[layer]).values).mean()
+            means = [
+                np.concatenate(df.cos.apply(lambda x: x[layer]).sample(n=len(df), replace=True).values).mean()
+                for _ in range(bootstrapping)
+            ]
+            ci_lo, ci_hi = np.percentile(means, [2.5, 97.5])
+            values.append((mean, ci_lo, ci_hi))
+        values = np.array(values)
+
+        ax.plot(values[:, 0], ".-", color="C3")
+        ax.fill_between(np.arange(num_layers), values[:, 1], values[:, 2], alpha=0.3, color="C3", edgecolor="none")
+        ax.set_title(model_name)
+        ax.set_xticks([0, 10, 20])
+
+    fig.tight_layout(rect=(0.05, 0.07, 1, 1))
+    fig.supylabel("Avg. cos. sim.")
+    fig.supxlabel("Layer index", y=0.05)
+    plt.savefig("plots/contextual/masked-similarity.pdf", bbox_inches="tight", pad_inches=0.0)
+    plt.close()
+
+
+
+def _plot_pooling_comparison(dataset, feature_sets, models):
+    Path("plots/contextual").mkdir(parents=True, exist_ok=True)
+    mfcc_success, melspec_success, mfcc_audio_success, melspec_audio_success = _get_spectral_baselines(dataset, feature_sets)
+
+    fig, axes = plt.subplots(1, 3, figsize=(6, 2), constrained_layout=True)
+    axes = axes.flatten()
+    feature = "total"
+
+    for plot_index, model in enumerate(models):
+        model_name = {
+            "wavlm-large": "WavLM", "hubert-large": "HuBERT", "w2v2-large": "wav2vec 2.0",
+        }[model]
+        avg_success = _get_success_rates(pickle.load(open(f"feats/similarities-{dataset}-{model}-featslice.pkl", "rb")), feature_sets)
+        center_success = _get_success_rates(pickle.load(open(f"feats/similarities-{dataset}-{model}-center-featslice.pkl", "rb")), feature_sets)
+
+        p1 = axes[plot_index].plot(avg_success["total"], ".--", c="C6", label="Avg. Pool.")[0]
+        p2 = axes[plot_index].plot(center_success["total"], ".-", c="C3", label="Center Pool.")[0]
+        axes[plot_index].set_title(f"{model_name}")
+        axes[plot_index].set_ylim(-0.05, 1.05)
+
+        l1 = axes[plot_index].axhline(mfcc_success[feature][0], ls="--", c="C0", label="MFCC")
+        l2 = axes[plot_index].axhline(melspec_success[feature][0], ls="--", c="C1", label="MelSpec")
+
+        legend_lines = [p2, p1, l1, l2]
+        legend_labels = [l.get_label() for l in legend_lines]
+
+        if plot_index % 3 == 0:
+            axes[plot_index].set_ylabel("Success rate")
+        axes[plot_index].set_xlabel("Layer index")
+
+    plt.savefig(f"plots/contextual/pooling-comparison-{dataset}.pdf", bbox_inches="tight", pad_inches=0.0)
+
+    fig_legend = plt.figure(figsize=(4, 1))
+    fig_legend.legend(
+        legend_lines,
+        legend_labels,
+        ncol=4,
+        frameon=False,
+        loc="center"
+    )
+    fig_legend.canvas.draw()
+    plt.savefig("plots/contextual/pooling-comparison-legend.pdf", bbox_inches="tight", pad_inches=0.0)
+
+
+def _plot_position_comparison(dataset, model, feature_sets, columns=["-l_2", "-l_1", "", "-r_1", "-r_2"]):
+    column_name = {"": "0"}
+    for i in range(5):
+        column_name[f"-l_{i}"] = f"-{i}"
+        column_name[f"-r_{i}"] = f"+{i}"
+
+    Path("plots/contextual").mkdir(parents=True, exist_ok=True)
+
+    fig, axes = plt.subplots(1, 5, figsize=(6, 2), constrained_layout=True, sharey=True)
+    axes = axes.flatten()
+    feature = "total"
+
+    for plot_index, (ax, col) in enumerate(zip(axes, columns)):
+        fname = f"feats/similarities-{dataset}-{model}-center-featslice{col}.pkl"
+        if not Path(fname).exists():
+            print(f"Similarities for {fname} do not exist, skipping.")
+            continue
+        success = _get_success_rates(pickle.load(open(fname, "rb")), feature_sets)
+        mfcc_success, melspec_success, mfcc_audio_success, melspec_audio_success = _get_spectral_baselines(dataset, feature_sets, postfix=col)
+
+        p1 = ax.plot(success["total"], ".-", c="C3", label="S3M")[0]
+        ax.set_title(f"{column_name[col]}")
+        ax.set_ylim(-0.05, 1.05)
+        ax.set_xticks([0, 10, 20])
+
+        l1 = ax.axhline(mfcc_success[feature][0], ls="--", c="C0", label="MFCC")
+        l2 = ax.axhline(melspec_success[feature][0], ls="--", c="C1", label="MelSpec")
+
+        legend_lines = [p1, l1, l2]
+        legend_labels = [l.get_label() for l in legend_lines]
+
+        if plot_index == 0:
+            ax.legend(frameon=False, fontsize=8.5, loc="upper center")
+
+    fig.supxlabel("Layer index")
+    fig.supylabel("Success rate")
+
+    plt.savefig(f"plots/contextual/position-comparison-{dataset}-{model}.pdf", bbox_inches="tight", pad_inches=0.0)
+
+
+
+if __name__ == "__main__":
+    # Figures for ACL 2026 submission
+    # # Dataset comparison
+    # timit_phs = filter_phones(pd.read_csv(f"feats/timit.csv"))
+    # voxangeles_quads = get_quadruples(filter_phones(pd.read_csv(f"feats/voxangeles.csv")))
+    # print(len(voxangeles_quads), "voxangeles quadruples")
+    # print(len([
+    #     quad for quad in voxangeles_quads
+    #     if any(ph not in timit_phs for ph in quad)
+    # ]), "voxangeles quadruples where unseen phone (timit) exist")
+
+    # # Plots
+    # for dataset in ["timit", "voxangeles"]:
+    #     phones = filter_phones(pd.read_csv(f"feats/{dataset}.csv"))
+    #     quadruples = get_quadruples(phones)
+
+    #     feature_sets = _get_feature_sets(quadruples)
+    #     feature_count_sets = _get_feature_count_sets(quadruples)
+    #     feature_sets_cons, feature_sets_vowel = _get_consonant_vowel_feature_sets(feature_sets)
+
+    #     _plot_individual_quadruplets(dataset)
+    #     _plot_success_rates(dataset, feature_sets, "panphon")
+    #     _plot_success_rates(dataset, feature_sets_cons, "panphon-cons")
+    #     _plot_success_rates(dataset, feature_sets_vowel, "panphon-vowel")
+    #     _plot_success_rates(dataset, feature_count_sets, "pfer")
+
+    #     _plot_model_comparison(dataset, feature_sets, [
+    #         "w2v2-large", "hubert-large", "wavlm-large",
+    #     ], "featslice", name="model-comparison", print_sliced=False, only_featslice_baselines=True, include_legend=(dataset == "timit"))
+    #     _plot_model_comparison(dataset, feature_sets, [
+    #         "w2v2-large", "hubert-large", "wavlm-large",
+    #     ], "featslice", name="model-comparison-full-featslice")
+    #     _plot_consonant_vowel_comparison(dataset, feature_sets, feature_sets_cons, feature_sets_vowel, include_legend=(dataset == "timit"))
+    #     _plot_cossim_comparison(dataset, feature_sets)
+    #     _plot_synth_scatter(
+    #         dataset, "wavlm",
+    #         targets=["vowel-hi", "vowel-lo", "vowel-back", "vowel-round", "consonant-nas", "consonant-son", "consonant-strid", "consonant-voi"],
+    #         metrics=["F1", "F1", "F2", "F2", "F1BW", "HNR", "COG", "COG"],
+    #     )
+    #     _plot_synth_density(
+    #         dataset, "wavlm",
+    #         targets=["vowel-hi", "vowel-lo", "vowel-back", "vowel-round", "consonant-nas", "consonant-son", "consonant-strid", "consonant-voi"],
+    #         metrics=["F1", "F1", "F2", "F2", "F1BW", "HNR", "COG", "COG"],
+    #     )
+    #     _plot_synth_scatter(
+    #         dataset, "mfcc",
+    #         targets=["vowel-hi", "vowel-lo", "vowel-back", "vowel-round", "consonant-nas", "consonant-son", "consonant-strid", "consonant-voi"],
+    #         metrics=["F1", "F1", "F2", "F2", "F1BW", "HNR", "COG", "COG"],
+    #     )
+    #     _plot_synth_scatter(
+    #         dataset, "mfcc-featslice",
+    #         targets=["vowel-hi", "vowel-lo", "vowel-back", "vowel-round", "consonant-nas", "consonant-son", "consonant-strid", "consonant-voi"],
+    #         metrics=["F1", "F1", "F2", "F2", "F1BW", "HNR", "COG", "COG"],
+    #     )
+
+    #     if dataset == "timit":
+    #         _plot_model_comparison(dataset, feature_sets, [
+    #             "w2v2-large", "hubert-large", "wavlm-large",
+    #         ], "audioslice", name="model-comparison-full-audioslice")
+    #         _plot_model_comparison(dataset, feature_sets, [
+    #             "xlsr-53", "w2v2-phoneme", "w2v2-multipa",
+    #         ], "featslice", name="model-comparison-pr", print_sliced=False)
+
+    #     _plot_phonological_vector_analysis(dataset)
+
+    # Figures for Interspeech 2026 submission
+    # _plot_masked_similarity(["w2v2-large", "hubert-large", "wavlm-large"])
     for dataset in ["timit", "voxangeles"]:
         phones = filter_phones(pd.read_csv(f"feats/{dataset}.csv"))
         quadruples = get_quadruples(phones)
-
         feature_sets = _get_feature_sets(quadruples)
-        feature_count_sets = _get_feature_count_sets(quadruples)
-        feature_sets_cons, feature_sets_vowel = _get_consonant_vowel_feature_sets(feature_sets)
 
-        _plot_individual_quadruplets(dataset)
-        _plot_success_rates(dataset, feature_sets, "panphon")
-        _plot_success_rates(dataset, feature_sets_cons, "panphon-cons")
-        _plot_success_rates(dataset, feature_sets_vowel, "panphon-vowel")
-        _plot_success_rates(dataset, feature_count_sets, "pfer")
+        # _plot_pooling_comparison(dataset, feature_sets, ["w2v2-large", "hubert-large", "wavlm-large"])
+        # _plot_contextual_vector_analysis(dataset, "wavlm-large-24", phones)
+        for model in ["w2v2-large", "hubert-large", "wavlm-large"]:
+            _plot_position_comparison(dataset, model, feature_sets=feature_sets)
 
-        _plot_model_comparison(dataset, feature_sets, [
-            "w2v2-large", "hubert-large", "wavlm-large",
-        ], "featslice", name="model-comparison", print_sliced=False, only_featslice_baselines=True, include_legend=(dataset == "timit"))
-        _plot_model_comparison(dataset, feature_sets, [
-            "w2v2-large", "hubert-large", "wavlm-large",
-        ], "featslice", name="model-comparison-full-featslice")
-        _plot_consonant_vowel_comparison(dataset, feature_sets, feature_sets_cons, feature_sets_vowel, include_legend=(dataset == "timit"))
-        _plot_cossim_comparison(dataset, feature_sets)
-        _plot_synth_scatter(
-            dataset, "wavlm",
-            targets=["vowel-hi", "vowel-lo", "vowel-back", "vowel-round", "consonant-nas", "consonant-son", "consonant-strid", "consonant-voi"],
-            metrics=["F1", "F1", "F2", "F2", "F1BW", "HNR", "COG", "COG"],
-        )
-        _plot_synth_density(
-            dataset, "wavlm",
-            targets=["vowel-hi", "vowel-lo", "vowel-back", "vowel-round", "consonant-nas", "consonant-son", "consonant-strid", "consonant-voi"],
-            metrics=["F1", "F1", "F2", "F2", "F1BW", "HNR", "COG", "COG"],
-        )
-        _plot_synth_scatter(
-            dataset, "mfcc",
-            targets=["vowel-hi", "vowel-lo", "vowel-back", "vowel-round", "consonant-nas", "consonant-son", "consonant-strid", "consonant-voi"],
-            metrics=["F1", "F1", "F2", "F2", "F1BW", "HNR", "COG", "COG"],
-        )
-        _plot_synth_scatter(
-            dataset, "mfcc-featslice",
-            targets=["vowel-hi", "vowel-lo", "vowel-back", "vowel-round", "consonant-nas", "consonant-son", "consonant-strid", "consonant-voi"],
-            metrics=["F1", "F1", "F2", "F2", "F1BW", "HNR", "COG", "COG"],
-        )
+    # df = pd.read_csv(f"small/metadata.csv")
+    # df["ipa"] = df["middle_phone"]
+    # phones = filter_phones(df)
+    # quadruples = get_quadruples(phones)
+    # feature_sets = _get_feature_sets(quadruples)
+    # feature_sets_cons, feature_sets_vowel = _get_consonant_vowel_feature_sets(feature_sets)
 
-        if dataset == "timit":
-            _plot_model_comparison(dataset, feature_sets, [
-                "w2v2-large", "hubert-large", "wavlm-large",
-            ], "audioslice", name="model-comparison-full-audioslice")
-            _plot_model_comparison(dataset, feature_sets, [
-                "xlsr-53", "w2v2-phoneme", "w2v2-multipa",
-            ], "featslice", name="model-comparison-pr", print_sliced=False)
+    # # for pool in ["average", "center", "1q", "2q", "4q", "5q"]:
+    # #     _plot_success_rates_with_target_col("triphones-small", feature_sets, "wavlm-large", pool, "pool-comparison")
 
-        _plot_phonological_vector_analysis(dataset)
+    # for pool in ["1q", "2q", "center", "4q", "5q"]:
+    #     for target_col in ["start_phone", "middle_phone", "end_phone"]:
+    #         _plot_consonant_vowel_comparison(
+    #             "triphones-small", feature_sets, feature_sets_cons, feature_sets_vowel,
+    #             model="wavlm-large", sliced=f"{pool}-featslice-{target_col}", include_legend=True, path="contextual")

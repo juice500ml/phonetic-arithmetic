@@ -19,6 +19,30 @@ def _get_args():
     return parser.parse_args()
 
 
+def _add_phone_context(df, n=5):
+    for i in range(1, n+1):
+        df[f"l_{i}"] = pd.Series(dtype="object")
+        df[f"r_{i}"] = pd.Series(dtype="object")
+
+    for _, group in tqdm(df.groupby("audio_path")):
+        if "timit_phn" in group.columns:
+            group = group[(~group.ipa.isna()) | (group.timit_phn.isin({"ey", "aw", "ay", "oy", "ow"}))]  # handle diphthongs
+        else:
+            group = group[(~group.ipa.isna())]
+        group = group.sort_values("min")
+
+        for i in range(1, n+1):
+            if len(group) > i:
+                df.loc[group.index[i:], f"l_{i}"] = group.ipa.iloc[:-i].to_numpy()
+                df.loc[group.index[:-i], f"r_{i}"] = group.ipa.iloc[i:].to_numpy()
+
+    for i in range(1, n+1):
+        df.loc[df["ipa"].isna(), f"l_{i}"] = np.nan
+        df.loc[df["ipa"].isna(), f"r_{i}"] = np.nan
+
+    return df
+
+
 def _prepare_timit(timit_path: Path):
     # adapted from https://github.com/juice500ml/acoustic-units-for-ood/blob/main/dataset_prep.py
     timit = load_dataset("timit_asr", data_dir=timit_path, trust_remote_code=True)
@@ -129,7 +153,7 @@ def _prepare_timit(timit_path: Path):
                     "split": split
                 })
 
-    return pd.DataFrame(rows)
+    return _add_phone_context(pd.DataFrame(rows))
 
 
 def _prepare_voxangeles(root_path: Path):
@@ -148,7 +172,7 @@ def _prepare_voxangeles(root_path: Path):
                 "language": path.parent.name,
             })
 
-    return pd.DataFrame(rows)
+    return _add_phone_context(pd.DataFrame(rows))
 
 
 if __name__ == "__main__":
