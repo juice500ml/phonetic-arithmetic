@@ -9,6 +9,7 @@ import argparse
 from pathlib import Path
 import scipy.stats
 from scipy.spatial.distance import cdist
+from itertools import product
 
 from estimate_similarity import filter_phones, get_quadruples, get_ci
 from analyze_synth import _split_train_test, filter_phones, separate_phones
@@ -81,7 +82,8 @@ def _get_success_rates(similarities, feature_sets):
         if len(quadruplets) > 0:
             num_layers = len(next(iter(similarities.values())))
             success_rate = np.zeros(num_layers)
-    
+
+            counts = 0
             for quadruplet, similarity in similarities.items():
                 if quadruplet in quadruplets:
                     arith_lo = np.array([m["arithmetic"][1] for m in similarity])
@@ -89,7 +91,8 @@ def _get_success_rates(similarities, feature_sets):
                     same_lo = np.array([m["same"][1] for m in similarity])
                     diff_hi = np.array([m["different"][2] for m in similarity])
                     success_rate += ((same_lo > arith_hi) & (arith_lo > diff_hi)).astype(int)
-            successes[feature] = success_rate / len(quadruplets)
+                    counts += 1
+            successes[feature] = success_rate / counts
     return successes
 
 
@@ -482,7 +485,7 @@ def _plot_cos_density(feats, sample_phon_vectors, avg_phon_vectors, counts, data
     plt.savefig(f"plots/main/phonovector-{dataset}-density-{show_phonewise}.pdf")
 
 
-def _plot_cos_matrix(feats, avg_phon_vectors, dataset, path="main"):
+def _plot_cos_matrix(feats, avg_phon_vectors, fname, path="main"):
     matrix = np.zeros((len(feats), len(feats)))
 
     for i in range(len(feats)):
@@ -519,7 +522,7 @@ def _plot_cos_matrix(feats, avg_phon_vectors, dataset, path="main"):
 
     plt.colorbar(im, ax=ax)
     plt.tight_layout()
-    plt.savefig(f"plots/{path}/phonovector-{dataset}-matrix.pdf")
+    plt.savefig(f"plots/{path}/phonovector-{fname}-matrix.pdf")
 
 
 def _plot_phonological_vector_analysis(dataset):
@@ -592,10 +595,10 @@ def _plot_phonological_vector_analysis(dataset):
     _plot_cos_density(list(pos_neg_phones.keys()), sample_phon_vectors, avg_phon_vectors, counts, dataset, phone_phon_vectors)
 
     # Plot cos matrix
-    _plot_cos_matrix(list(pos_neg_phones.keys()), avg_phon_vectors, dataset)
+    _plot_cos_matrix(list(pos_neg_phones.keys()), avg_phon_vectors, fname=dataset)
 
 
-def _plot_contextual_vector_analysis(dataset, model, phones, locations=["l_1", "ipa", "r_1"]):
+def _calculate_contextual_vectors(dataset, model, phones, locations):
     column_name = {"ipa": "0"}
     for i in range(5):
         column_name[f"l_{i}"] = f"-{i}"
@@ -623,7 +626,7 @@ def _plot_contextual_vector_analysis(dataset, model, phones, locations=["l_1", "
     avg_phon_vectors = {}
 
     for col in locations:
-        for feat, (pos_phones, neg_phones) in tqdm(pos_neg_phones.items()):
+        for feat, (pos_phones, neg_phones) in pos_neg_phones.items():
             df_pos = df[df[col].isin(pos_phones)]
             df_neg = df[df[col].isin(neg_phones)]
 
@@ -633,8 +636,36 @@ def _plot_contextual_vector_analysis(dataset, model, phones, locations=["l_1", "
             # Average phonological vector (ours)
             avg_phon_vectors[f"{feat} ({column_name[col]})"] = pos.mean(0) - neg.mean(0)
 
-    # Plot cos matrix
-    _plot_cos_matrix(list(avg_phon_vectors.keys()), avg_phon_vectors, dataset, path="contextual")
+    return avg_phon_vectors
+
+
+def _plot_contextual_vector_analysis(dataset, model, phones, locations=["l_1", "ipa", "r_1"]):
+    avg_phon_vectors = _calculate_contextual_vectors(dataset, model, phones, locations)
+    _plot_cos_matrix(list(avg_phon_vectors.keys()), avg_phon_vectors, fname=f"{dataset}-{model}", path="contextual")
+
+
+def _plot_contextual_orthogonality(dataset, model, phones, locations=["l_1", "ipa", "r_1"]):
+    layerwise_vectors = []
+    same_pos, diff_pos = [], []
+
+    for layer in tqdm(range(25)):
+        layerwise_vectors.append(_calculate_contextual_vectors(dataset, f"{model}-{layer}", phones, locations))
+
+        _same_pos, _diff_pos = [], []
+        for k1, k2 in product(layerwise_vectors[layer].keys(), layerwise_vectors[layer].keys()):
+            d = cdist(layerwise_vectors[layer][k1][np.newaxis, :], layerwise_vectors[layer][k2][np.newaxis, :], metric="cosine")
+            if k1.split()[-1] == k2.split()[-1]:
+                _same_pos.append(d)
+            else:
+                _diff_pos.append(d)
+        same_pos.append(1.0 - np.abs(np.array(_same_pos)).mean())
+        diff_pos.append(1.0 - np.abs(np.array(_diff_pos)).mean())
+
+    plt.plot(same_pos, ".-", color="C0", label="Same")
+    plt.plot(diff_pos, ".-", color="C1", label="Different")
+    plt.legend()
+    plt.savefig(f"plots/contextual/orthogonality-{dataset}-{model}.pdf")
+    plt.close()
 
 
 def _plot_masked_similarity(models, dataset="timit", bootstrapping=1000):
@@ -756,6 +787,35 @@ def _plot_position_comparison(dataset, model, feature_sets, columns=["-l_2", "-l
     plt.savefig(f"plots/contextual/position-comparison-{dataset}-{model}.pdf", bbox_inches="tight", pad_inches=0.0)
 
 
+def _plot_random_position_comparison(dataset, model, feature_sets, columns=["l_2", "l_1", "ipa", "r_1", "r_2"]):
+    column_name = {"ipa": "0"}
+    for i in range(5):
+        column_name[f"l_{i}"] = f"-{i}"
+        column_name[f"r_{i}"] = f"+{i}"
+
+    Path("plots/contextual").mkdir(parents=True, exist_ok=True)
+
+    results = pickle.load(open(f"feats/similarities-{dataset}-{model}-random-featslice.pkl", "rb"))
+    bins = results["bins"]
+    xs = [(lo + hi) / 2 for lo, hi in zip(bins[:-1], bins[1:])]
+
+    fig, axes = plt.subplots(1, len(columns), figsize=(6, 2), constrained_layout=True, sharey=True)
+    axes = axes.flatten()
+
+    for ax, column in zip(axes, columns):
+        rates = [_get_success_rates(r, feature_sets)["total"] for r in results[column]]
+        ax.plot(xs, rates, ".-", c="C3")
+        ax.set_title(f"{column_name[column]}")
+        ax.set_ylim(-0.05, 1.05)
+        ax.set_xlim(-0.05, 1.05)
+        ax.set_xticks([0.0, 0.5, 1.0])
+
+    fig.supxlabel("Relative position")
+    fig.supylabel("Success rate")
+
+    plt.savefig(f"plots/contextual/random-position-comparison-{dataset}-{model}.pdf", bbox_inches="tight", pad_inches=0.0)
+
+
 
 if __name__ == "__main__":
     # Figures for ACL 2026 submission
@@ -830,9 +890,16 @@ if __name__ == "__main__":
         feature_sets = _get_feature_sets(quadruples)
 
         # _plot_pooling_comparison(dataset, feature_sets, ["w2v2-large", "hubert-large", "wavlm-large"])
-        # _plot_contextual_vector_analysis(dataset, "wavlm-large-24", phones)
-        for model in ["w2v2-large", "hubert-large", "wavlm-large"]:
-            _plot_position_comparison(dataset, model, feature_sets=feature_sets)
+        # for model in ["w2v2-large", "hubert-large", "wavlm-large"]:
+        #     _plot_position_comparison(dataset, model, feature_sets=feature_sets)
+
+        # for model in ["wavlm-large-24", "hubert-large-24", "w2v2-large-9", "w2v2-large-22"]:
+        #     _plot_contextual_vector_analysis(dataset, model, phones)
+        _plot_contextual_orthogonality(dataset, "wavlm-large", phones)
+        _plot_contextual_orthogonality(dataset, "w2v2-large", phones)
+        _plot_contextual_orthogonality(dataset, "hubert-large", phones)
+        # for model in ["w2v2-large-22", "melspec-0", "mfcc-0"]:
+        #     _plot_random_position_comparison(dataset, model, feature_sets=feature_sets)
 
     # df = pd.read_csv(f"small/metadata.csv")
     # df["ipa"] = df["middle_phone"]

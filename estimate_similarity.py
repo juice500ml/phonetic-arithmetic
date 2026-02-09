@@ -127,6 +127,53 @@ def process_quadruplet(df, quadruplet):
     }
 
 
+def split_df_per_position(
+    df,
+    columns,
+    quadruples,
+    bins,
+    stride=320,
+    window=400,
+):
+    if window == 0:
+        # mfcc and melspec cases; it has padding
+        df["relative_position"] = (df["feat_index"] + 0.5) / df["feat_length"]
+    else:
+        # s3m cases
+        total = df["feat_length"] * stride + (window - stride)
+        position = df["feat_index"] * stride + (window // 2)
+        df["relative_position"] = position / total
+
+    dfs = [
+        df[(df.relative_position >= lo) & (df.relative_position < hi)].copy()
+        for lo, hi in zip(bins[:-1], bins[1:])
+    ]
+    print("Split into %d bins" % len(dfs))
+    print("Sample counts:", [len(_df) for _df in dfs])
+    print("Removed samples:")
+    print("left:", len(df[df.relative_position < bins[0]]))
+    print("right:", len(df[df.relative_position >= bins[-1]]))
+
+    # Sanity check
+    filtered_quadruples = []
+    for quad in quadruples:
+        exist = True
+        for _df in dfs:
+            for column in columns:
+                if not all((_df[column] == p).any() for p in quad):
+                    exist = False
+                    break
+            if not exist:
+                break
+        if exist:
+            filtered_quadruples.append(quad)
+    
+    if len(filtered_quadruples) < len(quadruples):
+        print("WARNING: Some quadruples were not found in some bins, %d < %d" % (len(filtered_quadruples), len(quadruples)))
+
+    return dfs, filtered_quadruples
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Compute synthesis distances over layers")
     parser.add_argument(
@@ -134,7 +181,7 @@ def parse_args():
         default=None,
     )
     parser.add_argument(
-        "--dataset_csv",
+        "--dataset_path",
         required=True,
         type=Path,
     )
@@ -145,16 +192,19 @@ def parse_args():
     )
     parser.add_argument(
         "--slice",
-        required=True,
     )
     parser.add_argument(
         "--target_col",
         default="ipa",
     )
+    parser.add_argument(
+        "--is_random",
+        action="store_true",
+    )
     args = parser.parse_args()
 
     if args.dataset_name is None:
-        args.dataset_name = args.dataset_csv.stem
+        args.dataset_name = args.dataset_path.stem
 
     return args
 
@@ -163,34 +213,71 @@ if __name__ == '__main__':
     args = parse_args()
     print(args)
 
-    df = pd.read_csv(args.dataset_csv)
-    if args.target_col != "ipa":
-        df["ipa"] = df[args.target_col]
+    if args.is_random:
+        assert args.dataset_path.suffix == ".pkl", "Dataset path must be a pickle file"
+        df = pd.read_pickle(args.dataset_path)
 
-    phones = filter_phones(df)
-    quadruples = get_quadruples(phones)
-
-    results = {q: [] for q in quadruples}
-    for layer in tqdm(range(25)):
-        inpath = f"feats/{args.dataset_name}-{args.model}-{layer}-{args.slice}.pkl"
-        if not Path(inpath).exists():
-            print(f"{inpath} does not exist, breaking.")
-            break
-
-        df = pd.read_pickle(inpath)
-        if args.target_col != "ipa":
-            df["ipa"] = df[args.target_col]
+        phones = filter_phones(df)
+        quadruples = get_quadruples(phones)
         df = df[df.ipa.isin(phones) & (df.split == "test")].reset_index(drop=True).copy()
         df.feat = df.feat.apply(normalize)
 
-        _process = partial(process_quadruplet, df)
-        ctx = mp.get_context("fork")
-        with ctx.Pool() as pool:
-            for q, result_dict in pool.imap_unordered(_process, quadruples):
-                results[q].append(result_dict)
+        columns = ["l_3", "l_2", "l_1", "ipa", "r_1", "r_2", "r_3"]
+        # columns = ["l_1", "ipa", "r_1"]
+        bins = [0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95]
+        stride, window = (512, 0) if args.model in ("melspec", "mfcc") else (320, 400)
+        dfs, filtered_quadruples = split_df_per_position(df, columns, quadruples, bins, stride, window)
 
-    outname = f"feats/similarities-{args.dataset_name}-{args.model}-{args.slice}.pkl"
-    if args.target_col != "ipa":
-        outname = outname.replace(".pkl", f"-{args.target_col}.pkl")
+        results = dict()
+        results["bins"] = bins
+
+        for column in tqdm(columns):
+            results[column] = list()
+            for binned_df in tqdm(dfs):
+                _df = binned_df.copy()
+                _df["ipa"] = binned_df[column]
+                rates = {q: [] for q in filtered_quadruples}
+
+                ctx = mp.get_context("fork")
+                _process = partial(process_quadruplet, _df)
+                with ctx.Pool() as pool:
+                    for q, result_dict in pool.imap_unordered(_process, filtered_quadruples):
+                        rates[q].append(result_dict)
+                results[column].append(rates)
+
+        outname = f"feats/similarities-{args.dataset_path.stem}.pkl"
+
+    else:
+        assert args.dataset_path.suffix == ".csv", "Dataset path must be a CSV file"
+        df = pd.read_csv(args.dataset_path)
+        if args.target_col != "ipa":
+            df["ipa"] = df[args.target_col]
+
+        phones = filter_phones(df)
+        quadruples = get_quadruples(phones)
+
+        results = {q: [] for q in quadruples}
+        for layer in tqdm(range(25)):
+            inpath = f"feats/{args.dataset_name}-{args.model}-{layer}-{args.slice}.pkl"
+            if not Path(inpath).exists():
+                print(f"{inpath} does not exist, breaking.")
+                break
+
+            df = pd.read_pickle(inpath)
+            if args.target_col != "ipa":
+                df["ipa"] = df[args.target_col]
+            df = df[df.ipa.isin(phones) & (df.split == "test")].reset_index(drop=True).copy()
+            df.feat = df.feat.apply(normalize)
+
+            _process = partial(process_quadruplet, df)
+            ctx = mp.get_context("fork")
+            with ctx.Pool() as pool:
+                for q, result_dict in pool.imap_unordered(_process, quadruples):
+                    results[q].append(result_dict)
+
+        outname = f"feats/similarities-{args.dataset_name}-{args.model}-{args.slice}.pkl"
+        if args.target_col != "ipa":
+            outname = outname.replace(".pkl", f"-{args.target_col}.pkl")
+
     with open(outname, "wb") as f:
         pickle.dump(results, f)
