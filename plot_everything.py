@@ -598,13 +598,11 @@ def _plot_phonological_vector_analysis(dataset):
     _plot_cos_matrix(list(pos_neg_phones.keys()), avg_phon_vectors, fname=dataset)
 
 
-def _calculate_contextual_vectors(dataset, model, phones, locations):
+def _calculate_contextual_vectors(df, phones, locations):
     column_name = {"ipa": "0"}
     for i in range(5):
         column_name[f"l_{i}"] = f"-{i}"
         column_name[f"r_{i}"] = f"+{i}"
-
-    df = pd.read_pickle(f"feats/{dataset}-{model}-center-featslice.pkl")
 
     cases = [
         ("hi", [("cons", -1)]),
@@ -640,7 +638,8 @@ def _calculate_contextual_vectors(dataset, model, phones, locations):
 
 
 def _plot_contextual_vector_analysis(dataset, model, phones, locations=["l_1", "ipa", "r_1"]):
-    avg_phon_vectors = _calculate_contextual_vectors(dataset, model, phones, locations)
+    df = pd.read_pickle(f"feats/{dataset}-{model}-center-featslice.pkl")
+    avg_phon_vectors = _calculate_contextual_vectors(df, phones, locations)
     _plot_cos_matrix(list(avg_phon_vectors.keys()), avg_phon_vectors, fname=f"{dataset}-{model}", path="contextual")
 
 
@@ -649,7 +648,8 @@ def _plot_contextual_orthogonality(dataset, model, phones, locations=["l_1", "ip
     same_pos, diff_pos = [], []
 
     for layer in tqdm(range(25)):
-        layerwise_vectors.append(_calculate_contextual_vectors(dataset, f"{model}-{layer}", phones, locations))
+        df = pd.read_pickle(f"feats/{dataset}-{model}-{layer}-center-featslice.pkl")
+        layerwise_vectors.append(_calculate_contextual_vectors(df, phones, locations))
 
         _same_pos, _diff_pos = [], []
         for k1, k2 in product(layerwise_vectors[layer].keys(), layerwise_vectors[layer].keys()):
