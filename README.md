@@ -129,6 +129,13 @@ python3 estimate_similarity.py \
     --dataset timit
 ```
 
+## Estimate PCS scores
+```bash
+python3 pcs.py \
+    --model wavlm-large \
+    --dataset timit
+```
+
 ## Synthesis experiments
 To train the vocoder, refer to: https://github.com/juice500ml/vocos/tree/wavlm
 
