@@ -402,6 +402,8 @@ def _plot_synth_density(dataset, model, targets, metrics):
 
 
 def _plot_cos_density(feats, sample_phon_vectors, avg_phon_vectors, counts, dataset, phone_phon_vectors=None):
+    Path("plots/main").mkdir(parents=True, exist_ok=True)
+
     show_phonewise = True if phone_phon_vectors is not None else False
 
     fig, axes = plt.subplots(
@@ -431,6 +433,8 @@ def _plot_cos_density(feats, sample_phon_vectors, avg_phon_vectors, counts, data
 
 
 def _plot_cos_matrix(feats, avg_phon_vectors, dataset):
+    Path("plots/main").mkdir(parents=True, exist_ok=True)
+
     matrix = np.zeros((len(feats), len(feats)))
 
     for i in range(len(feats)):
@@ -465,6 +469,8 @@ def _plot_cos_matrix(feats, avg_phon_vectors, dataset):
 
 
 def _plot_phonological_vector_analysis(dataset):
+    Path("plots/main").mkdir(parents=True, exist_ok=True)
+
     df = pd.read_pickle(f"feats/{dataset}-wavlm-large-24-featslice.pkl")
     df_train, df_test = _split_train_test(df)
     phones = filter_phones(df_test)
@@ -539,6 +545,47 @@ def _plot_phonological_vector_analysis(dataset):
     _plot_cos_matrix(list(pos_neg_phones.keys()), avg_phon_vectors, dataset)
 
 
+def _plot_pcs(dataset, models, baselines):
+    Path("plots/main").mkdir(parents=True, exist_ok=True)
+
+    model_names = {
+        "wavlm-large": "WavLM", "hubert-large": "HuBERT", "w2v2-large": "wav2vec 2.0",
+        "w2v2-phoneme": "Wav2vec2Phoneme", "w2v2-multipa": "MultIPA", "xlsr-53": "XLSR-53",
+    }
+
+    fig, axes = plt.subplots(1, len(models), figsize=(len(models) * 2, 2), constrained_layout=True, sharey=True)
+    for ax, model in zip(axes, models):
+        results = pd.read_pickle(f"feats/pcs-{dataset}-{model}.pkl")
+        l = ax.plot(results.groupby("layer").agg({"pcs": "mean"}), ".-", label="S3M", c="C3")
+        print(model, " | ".join([f"{v.item():.4f}" for v in results.groupby("layer").agg({"pcs": "mean"}).to_numpy()]))
+
+        legend_lines = [l[0]]
+        for i, baseline in enumerate(baselines):
+            results = pd.read_pickle(f"feats/pcs-{dataset}-{baseline}.pkl")
+            l = ax.axhline(results.pcs.mean(), label={"melspec": "MelSpec", "mfcc": "MFCC"}[baseline], c=f"C{i}")
+            legend_lines.append(l)
+        l = ax.axhline(0.5, ls="--", label="Random")
+        legend_lines.append(l)
+
+        ax.set_title(model_names[model])
+
+        legend_labels = [l.get_label() for l in legend_lines]
+
+    plt.savefig(f"plots/main/pcs-{dataset}.pdf")
+
+
+    fig_legend = plt.figure(figsize=(4, 1))
+    fig_legend.legend(
+        legend_lines,
+        legend_labels,
+        ncol=4,
+        frameon=False,
+        loc="center"
+    )
+    fig_legend.canvas.draw()
+    plt.savefig("plots/main/pcs-legend.pdf", bbox_inches="tight", pad_inches=0.0)
+
+
 if __name__ == "__main__":
     # Dataset comparison
     timit_phs = filter_phones(pd.read_csv(f"feats/timit.csv"))
@@ -593,6 +640,9 @@ if __name__ == "__main__":
             metrics=["F1", "F1", "F2", "F2", "F1BW", "HNR", "COG", "COG"],
         )
 
+        _plot_phonological_vector_analysis(dataset)
+        _plot_pcs(dataset, ["wavlm-large", "hubert-large", "w2v2-large"], ["mfcc", "melspec"])
+
         if dataset == "timit":
             _plot_model_comparison(dataset, feature_sets, [
                 "w2v2-large", "hubert-large", "wavlm-large",
@@ -600,5 +650,3 @@ if __name__ == "__main__":
             _plot_model_comparison(dataset, feature_sets, [
                 "xlsr-53", "w2v2-phoneme", "w2v2-multipa",
             ], "featslice", name="model-comparison-pr", print_sliced=False)
-
-        _plot_phonological_vector_analysis(dataset)
