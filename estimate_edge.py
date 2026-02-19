@@ -1,4 +1,5 @@
 import argparse
+import functools
 from pathlib import Path
 
 import panphon
@@ -11,6 +12,7 @@ from tqdm import tqdm
 
 from estimate_similarity import filter_phones
 from plot_everything import _calculate_contextual_vectors
+from analyze_synth import _split_train_test
 
 
 def parse_args():
@@ -18,7 +20,7 @@ def parse_args():
     parser.add_argument("--feature_path", type=Path, required=True)
     parser.add_argument("--output_path", type=Path, required=True)
     parser.add_argument("--sr", type=int, default=16000)
-    parser.add_argument("--args.frames", type=int, default=5)
+    parser.add_argument("--frames", type=int, default=5)
     parser.add_argument("--stride_size", type=int, default=320)
     parser.add_argument("--model", type=str, default="microsoft/wavlm-large")
     parser.add_argument("--device", type=str, default="cuda")
@@ -27,8 +29,11 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
+    print(args)
+
     df = pd.read_pickle(args.feature_path)
     phones = filter_phones(df)
+    train_df, df = _split_train_test(df)
 
     # Feature slicing
     stride_size = args.stride_size
@@ -45,7 +50,7 @@ if __name__ == "__main__":
 
     # Phonological vectors
     keys = [f"{f} ({i})" for f in v_phono_feats + c_phono_feats for i in ["-1", "0", "+1"]]
-    avg_phon_vectors = _calculate_contextual_vectors(df, phones, ["l_1", "ipa", "r_1"])
+    avg_phon_vectors = _calculate_contextual_vectors(train_df, phones, ["l_1", "ipa", "r_1"])
     vectors = np.stack([avg_phon_vectors[k] for k in keys])
 
     # Look only at triplets
@@ -53,25 +58,33 @@ if __name__ == "__main__":
     df = df[df.ipa.isin(phones) & df.l_1.isin(phones) & df.r_1.isin(phones)]
 
     # Prepare models
-    processor = Wav2Vec2FeatureExtractor.from_pretrained(args.model)
-    model = AutoModel.from_pretrained(args.model).to(args.device)
+    if args.model in ("mfcc", "melspec"):
+        feat_func = {
+            "melspec": functools.partial(librosa.feature.melspectrogram, sr=args.sr),
+            "mfcc": functools.partial(librosa.feature.mfcc, sr=args.sr),
+        }[args.model]
+    else:
+        processor = Wav2Vec2FeatureExtractor.from_pretrained(args.model)
+        model = AutoModel.from_pretrained(args.model).to(args.device)
 
-    # 
+    # Calculate similarities
+    results = []
     for path in tqdm(df.audio_path.unique()):
         audio, _ = librosa.load(path, sr=16000, mono=True)
-        inputs = processor(
-            raw_speech=[audio],
-            sampling_rate=16000,
-            padding=False,
-            return_tensors="pt",
-        )
-        out = model(**{k: v.to(args.device) for k, v in inputs.items()})
-        feats = out.last_hidden_state[0].detach().numpy()
+        if args.model in ("mfcc", "melspec"):
+            feats = feat_func(y=audio, n_fft=min(2048, len(audio))).T
+        else:
+            inputs = processor(
+                raw_speech=[audio],
+                sampling_rate=16000,
+                padding=False,
+                return_tensors="pt",
+            )
+            out = model(**{k: v.to(args.device) for k, v in inputs.items()})
+            feats = out.last_hidden_state[0].detach().cpu().numpy()
 
         sims = 1.0 - cdist(vectors, feats, metric="cosine")
         sims = {k: sims[i] for i, k in enumerate(keys)}
-
-        results = []
 
         for row in df[df.audio_path == path].itertuples():
             start, end, label = row.min, row.max, row.ipa
@@ -99,7 +112,7 @@ if __name__ == "__main__":
                 }
 
                 # Left case
-                if l_1_feat[features[phn_name]] != ipa_feat[features[phn_name]] and ipa_feat[features[phn_name]] == +1:
+                if l_1_feat[features[phn_name]] == -1 and ipa_feat[features[phn_name]] == +1:
                     edge_index = _sec_to_index(sims[f"{phn_name} (0)"], row.min)
                     max_index = len(sims[f"{phn_name} (0)"])
                     start_index = edge_index - args.frames
@@ -111,7 +124,7 @@ if __name__ == "__main__":
                         results.append(result)
 
                 # Right case
-                if r_1_feat[features[phn_name]] != ipa_feat[features[phn_name]] and ipa_feat[features[phn_name]] == +1:
+                if r_1_feat[features[phn_name]] == -1 and ipa_feat[features[phn_name]] == +1:
                     edge_index = _sec_to_index(sims[f"{phn_name} (0)"], row.max)
                     max_index = len(sims[f"{phn_name} (0)"])
                     start_index = edge_index - args.frames

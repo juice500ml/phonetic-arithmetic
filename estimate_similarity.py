@@ -223,8 +223,10 @@ if __name__ == '__main__':
         df.feat = df.feat.apply(normalize)
 
         columns = ["l_3", "l_2", "l_1", "ipa", "r_1", "r_2", "r_3"]
-        # columns = ["l_1", "ipa", "r_1"]
-        bins = [0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95]
+        if args.model in ("mfcc", "melspec"):
+            bins = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+        else:
+            bins = [0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95]
         stride, window = (512, 0) if args.model in ("melspec", "mfcc") else (320, 400)
         dfs, filtered_quadruples = split_df_per_position(df, columns, quadruples, bins, stride, window)
 
