@@ -554,7 +554,7 @@ def _plot_pcs(dataset, models, baselines):
     }
 
     fig, axes = plt.subplots(1, len(models), figsize=(len(models) * 2, 2), constrained_layout=True, sharey=True)
-    for ax, model in zip(axes, models):
+    for i, (ax, model) in enumerate(zip(axes, models)):
         results = pd.read_pickle(f"feats/pcs-{dataset}-{model}.pkl")
         l = ax.plot(results.groupby("layer").agg({"pcs": "mean"}), ".-", label="S3M", c="C3")
         print(model, " | ".join([f"{v.item():.4f}" for v in results.groupby("layer").agg({"pcs": "mean"}).to_numpy()]))
@@ -570,8 +570,10 @@ def _plot_pcs(dataset, models, baselines):
         ax.set_title(model_names[model])
 
         legend_labels = [l.get_label() for l in legend_lines]
+        ax.set_xlabel("Layer index")
 
-    plt.savefig(f"plots/main/pcs-{dataset}.pdf")
+    axes[0].set_ylabel("PCS")
+    plt.savefig(f"plots/main/pcs-{dataset}.pdf", bbox_inches="tight", pad_inches=0.0)
 
 
     fig_legend = plt.figure(figsize=(4, 1))
