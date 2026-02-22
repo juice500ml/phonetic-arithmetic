@@ -499,36 +499,43 @@ def _plot_cos_matrix(feats, avg_phon_vectors, fname, path="main"):
 
             matrix[i, j] = matrix[j, i] = (1.0 - dists).mean()
 
-    if path == "contextual":
-        fig, ax = plt.subplots(figsize=(12, 10))
-    else:
-        fig, ax = plt.subplots(figsize=(6, 5))
+    fig, ax = plt.subplots(figsize=(6, 5))
     im = ax.imshow(matrix, cmap=plt.cm.PuOr, vmin=-1, vmax=1)
 
     ax.set_xticks(range(len(feats)))
     ax.set_yticks(range(len(feats)))
-    if path == "contextual":
-        ax.set_xticklabels(feats, rotation=45, ha="right")
+    if len(matrix) > 8:
+        ax.set_title("Contextual Phonological Vector Comparison")
+        ax.set_xticks(np.arange(-0.5, len(matrix), 8), minor=True)
+        ax.set_yticks(np.arange(-0.5, len(matrix), 8), minor=True)
+        n = len(matrix) // 8 // 2
+        tickrange = [f"{i:+d}" for i in range(-n, n + 1)]
+        ax.set_xticks(np.arange(4, len(matrix), 8), tickrange, minor=False)
+        ax.set_yticks(np.arange(4, len(matrix), 8), tickrange, minor=False)
+        ax.grid(which="minor", color="black", linestyle="-", linewidth=1, alpha=0.5)
+        ax.tick_params(which="minor", bottom=False, left=False, labelbottom=False, labelleft=False)
+        ax.tick_params(axis='x', length=0)
+        ax.tick_params(axis='y', length=0)
     else:
         ax.set_xticklabels(feats)
-    ax.set_yticklabels(feats)
-    ax.set_title("Phonological Vector Comparison")
-    for i in range(matrix.shape[0]):
-        for j in range(matrix.shape[1]):
-            color = "white" if abs(matrix[i, j]) > 0.5 else "black"
-            ax.text(j, i, f"{matrix[i, j]:.2f}",
-                    ha="center", va="center",
-                    color=color, fontsize=9)
+        ax.set_yticklabels(feats)
+        ax.set_title("Phonological Vector Comparison")
+        for i in range(matrix.shape[0]):
+            for j in range(matrix.shape[1]):
+                color = "white" if abs(matrix[i, j]) > 0.5 else "black"
+                ax.text(j, i, f"{matrix[i, j]:.2f}",
+                        ha="center", va="center",
+                        color=color, fontsize=9)
 
     plt.colorbar(im, ax=ax)
     plt.tight_layout()
     plt.savefig(f"plots/{path}/phonovector-{fname}-matrix.pdf")
 
 
-def _plot_phonological_vector_analysis(dataset):
-    df = pd.read_pickle(f"feats/{dataset}-wavlm-large-24-featslice.pkl")
+def _plot_phonological_vector_analysis(dataset, slice="featslice"):
+    df = pd.read_pickle(f"feats/{dataset}-wavlm-large-24-{slice}.pkl")
     df_train, df_test = _split_train_test(df)
-    phones = filter_phones(df_test)
+    phones = filter_phones(df_train, cutoff=0)
 
     cases = [
         ("hi", [("cons", -1)]),
@@ -590,12 +597,13 @@ def _plot_phonological_vector_analysis(dataset):
             else:
                 sample_phon_vectors[count][feat] = feats.reshape(sample_size, count, -1).mean(axis=1)
 
-    # Plot cos density plots
-    _plot_cos_density(list(pos_neg_phones.keys()), sample_phon_vectors, avg_phon_vectors, counts, dataset)
-    _plot_cos_density(list(pos_neg_phones.keys()), sample_phon_vectors, avg_phon_vectors, counts, dataset, phone_phon_vectors)
+    if slice == "featslice":
+        # Plot cos density plots
+        _plot_cos_density(list(pos_neg_phones.keys()), sample_phon_vectors, avg_phon_vectors, counts, dataset)
+        _plot_cos_density(list(pos_neg_phones.keys()), sample_phon_vectors, avg_phon_vectors, counts, dataset, phone_phon_vectors)
 
     # Plot cos matrix
-    _plot_cos_matrix(list(pos_neg_phones.keys()), avg_phon_vectors, fname=dataset)
+    _plot_cos_matrix(list(pos_neg_phones.keys()), avg_phon_vectors, fname=dataset, path = "main" if slice == "featslice" else "contextual")
 
 
 def _calculate_contextual_vectors(df, phones, locations):
@@ -637,10 +645,10 @@ def _calculate_contextual_vectors(df, phones, locations):
     return avg_phon_vectors
 
 
-def _plot_contextual_vector_analysis(dataset, model, phones, locations=["l_1", "ipa", "r_1"]):
+def _plot_contextual_vector_analysis(dataset, model, phones, locations=["l_2", "l_1", "ipa", "r_1", "r_2"]):
     df = pd.read_pickle(f"feats/{dataset}-{model}-center-featslice.pkl")
     avg_phon_vectors = _calculate_contextual_vectors(df, phones, locations)
-    _plot_cos_matrix(list(avg_phon_vectors.keys()), avg_phon_vectors, fname=f"{dataset}-{model}", path="contextual")
+    _plot_cos_matrix(list(avg_phon_vectors.keys()), avg_phon_vectors, fname=f"{dataset}-{model}-position", path="contextual")
 
 
 def _plot_contextual_orthogonality(dataset, model, phones, locations=["l_1", "ipa", "r_1"]):
@@ -653,18 +661,24 @@ def _plot_contextual_orthogonality(dataset, model, phones, locations=["l_1", "ip
 
         _same_pos, _diff_pos = [], []
         for k1, k2 in product(layerwise_vectors[layer].keys(), layerwise_vectors[layer].keys()):
-            d = cdist(layerwise_vectors[layer][k1][np.newaxis, :], layerwise_vectors[layer][k2][np.newaxis, :], metric="cosine")
-            if k1.split()[-1] == k2.split()[-1]:
+            d = 1.0 - cdist(layerwise_vectors[layer][k1][np.newaxis, :], layerwise_vectors[layer][k2][np.newaxis, :], metric="cosine").item()
+            k1_feat, k1_pos = k1.split()
+            k2_feat, k2_pos = k2.split()
+            v_phon = ["hi", "lo", "back", "round"]
+            c_phon = ["nas", "son", "strid", "voi"]
+            if k1 == k2:
+                pass
+            elif ((k1_feat in v_phon and k2_feat in v_phon) or (k1_feat in c_phon and k2_feat in c_phon)) and k1_pos == k2_pos:
                 _same_pos.append(d)
             else:
                 _diff_pos.append(d)
-        same_pos.append(1.0 - np.abs(np.array(_same_pos)).mean())
-        diff_pos.append(1.0 - np.abs(np.array(_diff_pos)).mean())
+        same_pos.append(np.abs(np.array(_same_pos)).mean())
+        diff_pos.append(np.abs(np.array(_diff_pos)).mean())
 
     plt.plot(same_pos, ".-", color="C0", label="Same")
     plt.plot(diff_pos, ".-", color="C1", label="Different")
     plt.legend()
-    plt.savefig(f"plots/contextual/orthogonality-{dataset}-{model}.pdf")
+    plt.savefig(f"plots/contextual/orthogonality-layerwise-{dataset}-{model}.pdf")
     plt.close()
 
 
@@ -816,6 +830,102 @@ def _plot_random_position_comparison(dataset, model, feature_sets, columns=["l_2
     plt.savefig(f"plots/contextual/random-position-comparison-{dataset}-{model}.pdf", bbox_inches="tight", pad_inches=0.0)
 
 
+def _plot_random_position_modelwise_comparison(models, dataset, feature_sets, columns=["l_2", "l_1", "ipa", "r_1", "r_2"]):
+    Path("plots/contextual").mkdir(parents=True, exist_ok=True)
+
+    lines = {}
+    for i, model in enumerate(models):
+        results = pickle.load(open(f"feats/similarities-{dataset}-{model}-random-featslice.pkl", "rb"))
+        bins = results["bins"]
+        x_range = [(lo + hi) / 2 for lo, hi in zip(bins[:-1], bins[1:])]
+        xs = []
+        ys = []
+        for i, column in enumerate(columns[::-1]):
+            ys += [_get_success_rates(r, feature_sets)["total"] for r in results[column]]
+            xs += [x - (len(columns) // 2 - i) for x in x_range]
+        lines[model] = {
+            "xs": xs,
+            "ys": ys,
+        }
+
+    def _get_model(s):
+        if "wavlm-large" in s:
+            return "WavLM", "C0", False
+        if "hubert-large" in s:
+            return "HuBERT", "C0", False
+        if "w2v2-large" in s:
+            return "wav2vec 2.0", "C0", False
+        if "melspec" in s:
+            return "MelSpec", "C2", True
+        if "mfcc" in s:
+            return "MFCC", "C3", True
+        raise ValueError(f"Unknown model: {s}")
+
+    comparisons = [k for k, meta in lines.items() if not _get_model(k)[2]]
+    baselines = [k for k, meta in lines.items() if _get_model(k)[2]]
+
+    fig, axes = plt.subplots(len(comparisons), 1, figsize=(5, 5), constrained_layout=True, sharex=True, sharey=True)
+
+    for ax, key in zip(axes, comparisons):
+        meta = lines[key]
+        name, color, is_baseline = _get_model(key)
+        ax.plot(meta["xs"], meta["ys"], ".-", label="S3M", color=color)
+        ax.set_title(name)
+        for baseline in baselines:
+            meta = lines[baseline]
+            name, color, is_baseline = _get_model(baseline)
+            ax.plot(meta["xs"], meta["ys"], ".-", label=name, color=color)
+
+        ax.axvspan(0, 1, alpha=0.1, color="C0")
+        for i, _ in enumerate(columns + [None]):
+            ax.axvline(- (len(columns) // 2 - i), ls="--", c="C3", alpha=0.5)
+        ax.set_ylabel("Success rate")
+        ax.set_xticks([])
+        ax.tick_params(axis='x', length=0)
+
+        if key == comparisons[-1]:
+            ax.set_xlabel("Relative phone position (normalized)")
+            ax.legend(loc="center left")
+            ticks = [- (len(columns) // 2 - i) for i in range(len(columns))]
+            ax.set_xticks([t + 0.5 for t in ticks], ticks)
+
+    plt.savefig(f"plots/contextual/random-position-comparison-{dataset}.pdf", bbox_inches="tight", pad_inches=0.0)
+
+
+def _plot_edges(dataset, model):
+    Path("plots/contextual").mkdir(parents=True, exist_ok=True)
+
+    _df = pd.read_pickle(f"feats/edges-{dataset}-{model}-center-featslice.pkl")
+    for feat in _df.feat.unique():
+        fig, axes = plt.subplots(1, 2, figsize=(5.5, 2), sharey=True)
+
+        blue = np.mean(_df[(_df.direction == "left") & (_df.feat == feat)].curr.tolist(), axis=0)
+        orange = np.mean(_df[(_df.direction == "left") & (_df.feat == feat)].prev.tolist(), axis=0)
+        axes[0].plot(blue, ".-", c="C0", label="$cos(f, v^0)$")
+        axes[0].plot(orange, ".-", c="C1", label="$cos(f, v^{+1})$")
+        axes[0].axvspan(5, 10.5, alpha=0.15, color="C0")
+        axes[0].set_xlim(-0.5, 10.5)
+        axes[0].axhline(0, ls="--", c="C2")
+        axes[0].text(0.25, 0.5, f"{feat}-", transform=axes[0].transAxes, ha="center", va="center", fontsize=18, alpha=0.3, weight="bold", zorder=1)
+        axes[0].text(0.75, 0.5, f"{feat}+", transform=axes[0].transAxes, ha="center", va="center", fontsize=18, alpha=0.3, weight="bold", zorder=1)
+        axes[0].set_ylabel("Avg. cos. sim.")
+        axes[0].set_xlabel("Frame index")
+
+        blue = np.mean(_df[(_df.direction == "right") & (_df.feat == feat)].curr.tolist(), axis=0)
+        orange = np.mean(_df[(_df.direction == "right") & (_df.feat == feat)].next.tolist(), axis=0)
+        axes[1].plot(blue, ".-", c="C0", label="$cos(f, v^0)$")
+        axes[1].plot(orange, ".-", c="C1", label="$cos(f, v^{-1})$")
+        axes[1].axhline(0, ls="--", c="C2")
+        axes[1].axvspan(-0.5, 5, alpha=0.15, color="C0")
+        axes[1].set_xlim(-0.5, 10.5)
+        axes[1].text(0.25, 0.5, f"{feat}+", transform=axes[1].transAxes, ha="center", va="center", fontsize=18, alpha=0.3, weight="bold", zorder=1)
+        axes[1].text(0.75, 0.5, f"{feat}-", transform=axes[1].transAxes, ha="center", va="center", fontsize=18, alpha=0.3, weight="bold", zorder=1)
+        axes[1].set_xlabel("Frame index")
+
+        plt.tight_layout()
+        plt.savefig(f"plots/contextual/edges-{dataset}-{model}-{feat}.pdf", bbox_inches="tight", pad_inches=0.0)
+        plt.close()
+
 
 if __name__ == "__main__":
     # Figures for ACL 2026 submission
@@ -851,11 +961,17 @@ if __name__ == "__main__":
     #     ], "featslice", name="model-comparison-full-featslice")
     #     _plot_consonant_vowel_comparison(dataset, feature_sets, feature_sets_cons, feature_sets_vowel, include_legend=(dataset == "timit"))
     #     _plot_cossim_comparison(dataset, feature_sets)
-    #     _plot_synth_scatter(
-    #         dataset, "wavlm",
-    #         targets=["vowel-hi", "vowel-lo", "vowel-back", "vowel-round", "consonant-nas", "consonant-son", "consonant-strid", "consonant-voi"],
-    #         metrics=["F1", "F1", "F2", "F2", "F1BW", "HNR", "COG", "COG"],
-    #     )
+        # _plot_synth_scatter(
+        #     dataset, "wavlm",
+        #     targets=["vowel-hi", "vowel-lo", "vowel-back", "vowel-round", "consonant-nas", "consonant-son", "consonant-strid", "consonant-voi"],
+        #     metrics=["F1", "F1", "F2", "F3", "F1BW", "HNR", "COG", "COG"],
+        # )
+        # _plot_synth_scatter(
+        #     dataset, "wavlm",
+        #     targets=["consonant-nas", "consonant-nas", "consonant-nas", "consonant-nas", "consonant-nas", "consonant-nas", "consonant-nas", ],
+        #     metrics=["F1", "F2", "F3", "F1BW", "ZCR", "HNR", "COG"],
+        # )
+        # print(dataset)
     #     _plot_synth_density(
     #         dataset, "wavlm",
     #         targets=["vowel-hi", "vowel-lo", "vowel-back", "vowel-round", "consonant-nas", "consonant-son", "consonant-strid", "consonant-voi"],
@@ -885,21 +1001,30 @@ if __name__ == "__main__":
     # Figures for Interspeech 2026 submission
     # _plot_masked_similarity(["w2v2-large", "hubert-large", "wavlm-large"])
     for dataset in ["timit", "voxangeles"]:
-        phones = filter_phones(pd.read_csv(f"feats/{dataset}.csv"))
-        quadruples = get_quadruples(phones)
-        feature_sets = _get_feature_sets(quadruples)
+        # phones = filter_phones(pd.read_csv(f"feats/{dataset}.csv"))
+        # quadruples = get_quadruples(phones)
+        # feature_sets = _get_feature_sets(quadruples)
 
         # _plot_pooling_comparison(dataset, feature_sets, ["w2v2-large", "hubert-large", "wavlm-large"])
         # for model in ["w2v2-large", "hubert-large", "wavlm-large"]:
         #     _plot_position_comparison(dataset, model, feature_sets=feature_sets)
-
-        # for model in ["wavlm-large-24", "hubert-large-24", "w2v2-large-9", "w2v2-large-22"]:
-        #     _plot_contextual_vector_analysis(dataset, model, phones)
-        _plot_contextual_orthogonality(dataset, "wavlm-large", phones)
-        _plot_contextual_orthogonality(dataset, "w2v2-large", phones)
-        _plot_contextual_orthogonality(dataset, "hubert-large", phones)
-        # for model in ["w2v2-large-22", "melspec-0", "mfcc-0"]:
+        # for model in ["wavlm-large-24", "hubert-large-24", "w2v2-large-9", "melspec-0", "mfcc-0"]:
         #     _plot_random_position_comparison(dataset, model, feature_sets=feature_sets)
+        # _plot_random_position_modelwise_comparison(
+        #     ["wavlm-large-24", "hubert-large-24", "w2v2-large-9", "melspec-0", "mfcc-0"],
+        #     dataset, feature_sets, ["l_2", "l_1", "ipa", "r_1", "r_2"],
+        # )
+
+        unfiltered_phones = filter_phones(pd.read_csv(f"feats/{dataset}.csv"), cutoff=0)
+
+        for model in ["wavlm-large-24", "hubert-large-24", "w2v2-large-9", "w2v2-large-22"]:
+            _plot_contextual_vector_analysis(dataset, model, unfiltered_phones)
+        # _plot_contextual_orthogonality(dataset, "wavlm-large", unfiltered_phones)
+        # _plot_contextual_orthogonality(dataset, "w2v2-large", unfiltered_phones)
+        # _plot_contextual_orthogonality(dataset, "hubert-large", unfiltered_phones)
+        _plot_phonological_vector_analysis(dataset, slice="center-featslice")
+        _plot_edges(dataset, "wavlm-large-24")
+
 
     # df = pd.read_csv(f"small/metadata.csv")
     # df["ipa"] = df["middle_phone"]
