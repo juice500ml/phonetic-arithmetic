@@ -1,4 +1,5 @@
 import pickle
+import functools
 import matplotlib.pyplot as plt
 from matplotlib.patches import ConnectionPatch
 import panphon
@@ -319,7 +320,7 @@ def _plot_synth_scatter(dataset, model, targets, metrics):
 
     fig, axes = plt.subplots(
         2, len(targets),
-        figsize=(16, 5), constrained_layout=True,
+        figsize=(len(targets) * 2, 5), constrained_layout=True,
     )
     for j, (target, metric) in enumerate(zip(targets, metrics)):
         df = pd.read_csv(f"feats/{dataset}-{model}-synth-{target}.csv")
@@ -354,7 +355,37 @@ def _plot_synth_scatter(dataset, model, targets, metrics):
             axes[i][j].scatter(x, y, color="C0" if cv == "vowel" else "C1", s=0.2, rasterized=True)
             axes[i][j].set_title(f"{title}\n$\\rho=${stats.statistic:.3f}")
 
-    plt.savefig(f"plots/main/synth-scatter-{dataset}-{model}.pdf")
+    if len(targets) < 8:
+        plt.savefig(f"plots/main/synth-scatter-{dataset}-{model}-partial.pdf")
+    else:
+        plt.savefig(f"plots/main/synth-scatter-{dataset}-{model}.pdf")
+
+
+def _plot_round_density(dataset, model):
+    Path("plots/main").mkdir(parents=True, exist_ok=True)
+
+    df = pd.read_csv(f"feats/{dataset}-{model}-synth-vowel-round.csv")
+
+    @functools.cache
+    def _is_round(ipa, ft=panphon.FeatureTable()):
+        return ft.fts(ipa)["round"] == +1
+    df["is_round"] = df["phone"].apply(_is_round)
+
+    fig, axes = plt.subplots(1, 3, figsize=(6, 2))
+    for i, ax in zip(range(1, 4), axes):
+        _df = df[~df[f"original_F{i}"].isna()]
+
+        round_np = _df[_df.is_round][f"original_F{i}"].to_numpy()
+        unround_np = _df[~_df.is_round][f"original_F{i}"].to_numpy()
+        stats = scipy.stats.spearmanr(_df.is_round.to_numpy().astype(int), _df[f"original_F{i}"].to_numpy().astype(float))
+        ax.hist(round_np, bins=30, alpha=0.5, density=True, label="round")
+        ax.hist(unround_np, bins=30, alpha=0.5, density=True, label="not round")
+        ax.yaxis.set_visible(False)
+        ax.set_title(f"F{i} ($\\rho={stats.statistic:.3f}$)")
+        ax.set_xlabel("Freq. (Hz)")
+        if i == 1:
+            ax.legend(frameon=False, fontsize=8)
+    plt.savefig(f"plots/main/synth-round-density-{dataset}-{model}.pdf")
 
 
 def _plot_synth_density(dataset, model, targets, metrics):
@@ -641,6 +672,13 @@ if __name__ == "__main__":
             targets=["vowel-hi", "vowel-lo", "vowel-back", "vowel-round", "consonant-nas", "consonant-son", "consonant-strid", "consonant-voi"],
             metrics=["F1", "F1", "F2", "F2", "F1BW", "HNR", "COG", "COG"],
         )
+        _plot_synth_scatter(
+            dataset, "wavlm",
+            targets=["vowel-round", "vowel-round", "vowel-round", ],
+            metrics=["F1", "F2", "F3", ],
+        )
+        _plot_round_density(dataset, "wavlm")
+
 
         _plot_phonological_vector_analysis(dataset)
         _plot_pcs(dataset, ["wavlm-large", "hubert-large", "w2v2-large"], ["mfcc", "melspec"])
