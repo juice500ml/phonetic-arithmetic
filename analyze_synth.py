@@ -163,7 +163,7 @@ def _parse_feature_spec(token):
 
 def _split_train_test(df):
     # TIMIT
-    if df.split.nunique() == 2:
+    if "train" in df.split.unique():
         train_df = df[df.split == "train"]
         test_df = df[df.split == "test"]
 

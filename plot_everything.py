@@ -789,7 +789,7 @@ def _plot_pooling_comparison(dataset, feature_sets, models):
         avg_success = _get_success_rates(pickle.load(open(f"feats/similarities-{dataset}-{model}-featslice.pkl", "rb")), feature_sets)
         center_success = _get_success_rates(pickle.load(open(f"feats/similarities-{dataset}-{model}-center-featslice.pkl", "rb")), feature_sets)
 
-        p1 = axes[plot_index].plot(avg_success["total"], ".--", c="C6", label="Avg. Pool.")[0]
+        p1 = axes[plot_index].plot(avg_success["total"], ".--", c="C6", label="Mean Pool.")[0]
         p2 = axes[plot_index].plot(center_success["total"], ".-", c="C3", label="Center Pool.")[0]
         axes[plot_index].set_title(f"{model_name}")
         axes[plot_index].set_ylim(-0.05, 1.05)
@@ -1033,6 +1033,7 @@ def _plot_edges(dataset, model):
         axes[0].text(0.75, 0.5, f"+{feat}", transform=axes[0].transAxes, ha="center", va="center", fontsize=18, alpha=0.3, weight="bold", zorder=1)
         axes[0].set_ylabel("Avg. cos. sim.")
         axes[0].set_xlabel("Frame index")
+        axes[0].set_xticks([1, 3, 5, 7, 9])
 
         blue = np.mean(_df[(_df.direction == "right") & (_df.feat == feat)].curr.tolist(), axis=0)
         orange = np.mean(_df[(_df.direction == "right") & (_df.feat == feat)].next.tolist(), axis=0)
@@ -1044,6 +1045,7 @@ def _plot_edges(dataset, model):
         axes[1].text(0.25, 0.5, f"+{feat}", transform=axes[1].transAxes, ha="center", va="center", fontsize=18, alpha=0.3, weight="bold", zorder=1)
         axes[1].text(0.75, 0.5, f"-{feat}", transform=axes[1].transAxes, ha="center", va="center", fontsize=18, alpha=0.3, weight="bold", zorder=1)
         axes[1].set_xlabel("Frame index")
+        axes[1].set_xticks([1, 3, 5, 7, 9])
 
         plt.tight_layout()
         plt.savefig(f"plots/contextual/edges-{dataset}-{model}-{feat}.pdf", bbox_inches="tight", pad_inches=0.0)
@@ -1052,113 +1054,95 @@ def _plot_edges(dataset, model):
 
 if __name__ == "__main__":
     # Figures for ACL 2026 submission
-    # # Dataset comparison
-    # timit_phs = filter_phones(pd.read_csv(f"feats/timit.csv"))
-    # voxangeles_quads = get_quadruples(filter_phones(pd.read_csv(f"feats/voxangeles.csv")))
-    # print(len(voxangeles_quads), "voxangeles quadruples")
-    # print(len([
-    #     quad for quad in voxangeles_quads
-    #     if any(ph not in timit_phs for ph in quad)
-    # ]), "voxangeles quadruples where unseen phone (timit) exist")
+    # Dataset comparison
+    timit_phs = filter_phones(pd.read_csv(f"feats/timit.csv"))
+    voxangeles_quads = get_quadruples(filter_phones(pd.read_csv(f"feats/voxangeles.csv")))
+    print(len(voxangeles_quads), "voxangeles quadruples")
+    print(len([
+        quad for quad in voxangeles_quads
+        if any(ph not in timit_phs for ph in quad)
+    ]), "voxangeles quadruples where unseen phone (timit) exist")
 
-    # # Plots
-    # for dataset in ["timit", "voxangeles"]:
-    #     phones = filter_phones(pd.read_csv(f"feats/{dataset}.csv"))
-    #     quadruples = get_quadruples(phones)
+    # Plots
+    for dataset in ["timit", "voxangeles"]:
+        phones = filter_phones(pd.read_csv(f"feats/{dataset}.csv"))
+        quadruples = get_quadruples(phones)
 
-    #     feature_sets = _get_feature_sets(quadruples)
-    #     feature_count_sets = _get_feature_count_sets(quadruples)
-    #     feature_sets_cons, feature_sets_vowel = _get_consonant_vowel_feature_sets(feature_sets)
+        feature_sets = _get_feature_sets(quadruples)
+        feature_count_sets = _get_feature_count_sets(quadruples)
+        feature_sets_cons, feature_sets_vowel = _get_consonant_vowel_feature_sets(feature_sets)
 
-    #     _plot_individual_quadruplets(dataset)
-    #     _plot_success_rates(dataset, feature_sets, "panphon")
-    #     _plot_success_rates(dataset, feature_sets_cons, "panphon-cons")
-    #     _plot_success_rates(dataset, feature_sets_vowel, "panphon-vowel")
-    #     _plot_success_rates(dataset, feature_count_sets, "pfer")
+        _plot_individual_quadruplets(dataset)
+        _plot_success_rates(dataset, feature_sets, "panphon")
+        _plot_success_rates(dataset, feature_sets_cons, "panphon-cons")
+        _plot_success_rates(dataset, feature_sets_vowel, "panphon-vowel")
+        _plot_success_rates(dataset, feature_count_sets, "pfer")
 
-    #     _plot_model_comparison(dataset, feature_sets, [
-    #         "w2v2-large", "hubert-large", "wavlm-large",
-    #     ], "featslice", name="model-comparison", print_sliced=False, only_featslice_baselines=True, include_legend=(dataset == "timit"))
-    #     _plot_model_comparison(dataset, feature_sets, [
-    #         "w2v2-large", "hubert-large", "wavlm-large",
-    #     ], "featslice", name="model-comparison-full-featslice")
-    #     _plot_consonant_vowel_comparison(dataset, feature_sets, feature_sets_cons, feature_sets_vowel, include_legend=(dataset == "timit"))
-    #     _plot_cossim_comparison(dataset, feature_sets)
-        # _plot_synth_scatter(
-        #     dataset, "wavlm",
-        #     targets=["vowel-hi", "vowel-lo", "vowel-back", "vowel-round", "consonant-nas", "consonant-son", "consonant-strid", "consonant-voi"],
-        #     metrics=["F1", "F1", "F2", "F3", "F1BW", "HNR", "COG", "COG"],
-        # )
-        # _plot_synth_scatter(
-        #     dataset, "wavlm",
-        #     targets=["consonant-nas", "consonant-nas", "consonant-nas", "consonant-nas", "consonant-nas", "consonant-nas", "consonant-nas", ],
-        #     metrics=["F1", "F2", "F3", "F1BW", "ZCR", "HNR", "COG"],
-        # )
-        # print(dataset)
-    #     _plot_synth_density(
-    #         dataset, "wavlm",
-    #         targets=["vowel-hi", "vowel-lo", "vowel-back", "vowel-round", "consonant-nas", "consonant-son", "consonant-strid", "consonant-voi"],
-    #         metrics=["F1", "F1", "F2", "F2", "F1BW", "HNR", "COG", "COG"],
-    #     )
-    #     _plot_synth_scatter(
-    #         dataset, "mfcc",
-    #         targets=["vowel-hi", "vowel-lo", "vowel-back", "vowel-round", "consonant-nas", "consonant-son", "consonant-strid", "consonant-voi"],
-    #         metrics=["F1", "F1", "F2", "F2", "F1BW", "HNR", "COG", "COG"],
-    #     )
-    #     _plot_synth_scatter(
-    #         dataset, "mfcc-featslice",
-    #         targets=["vowel-hi", "vowel-lo", "vowel-back", "vowel-round", "consonant-nas", "consonant-son", "consonant-strid", "consonant-voi"],
-    #         metrics=["F1", "F1", "F2", "F2", "F1BW", "HNR", "COG", "COG"],
-    #     )
+        _plot_model_comparison(dataset, feature_sets, [
+            "w2v2-large", "hubert-large", "wavlm-large",
+        ], "featslice", name="model-comparison", print_sliced=False, only_featslice_baselines=True, include_legend=(dataset == "timit"))
+        _plot_model_comparison(dataset, feature_sets, [
+            "w2v2-large", "hubert-large", "wavlm-large",
+        ], "featslice", name="model-comparison-full-featslice")
+        _plot_consonant_vowel_comparison(dataset, feature_sets, feature_sets_cons, feature_sets_vowel, include_legend=(dataset == "timit"))
+        _plot_cossim_comparison(dataset, feature_sets)
+        _plot_synth_scatter(
+            dataset, "wavlm",
+            targets=["vowel-hi", "vowel-lo", "vowel-back", "vowel-round", "consonant-nas", "consonant-son", "consonant-strid", "consonant-voi"],
+            metrics=["F1", "F1", "F2", "F3", "F1BW", "HNR", "COG", "COG"],
+        )
+        _plot_synth_scatter(
+            dataset, "wavlm",
+            targets=["consonant-nas", "consonant-nas", "consonant-nas", "consonant-nas", "consonant-nas", "consonant-nas", "consonant-nas", ],
+            metrics=["F1", "F2", "F3", "F1BW", "ZCR", "HNR", "COG"],
+        )
+        _plot_synth_density(
+            dataset, "wavlm",
+            targets=["vowel-hi", "vowel-lo", "vowel-back", "vowel-round", "consonant-nas", "consonant-son", "consonant-strid", "consonant-voi"],
+            metrics=["F1", "F1", "F2", "F2", "F1BW", "HNR", "COG", "COG"],
+        )
+        _plot_synth_scatter(
+            dataset, "mfcc",
+            targets=["vowel-hi", "vowel-lo", "vowel-back", "vowel-round", "consonant-nas", "consonant-son", "consonant-strid", "consonant-voi"],
+            metrics=["F1", "F1", "F2", "F2", "F1BW", "HNR", "COG", "COG"],
+        )
+        _plot_synth_scatter(
+            dataset, "mfcc-featslice",
+            targets=["vowel-hi", "vowel-lo", "vowel-back", "vowel-round", "consonant-nas", "consonant-son", "consonant-strid", "consonant-voi"],
+            metrics=["F1", "F1", "F2", "F2", "F1BW", "HNR", "COG", "COG"],
+        )
 
-    #     if dataset == "timit":
-    #         _plot_model_comparison(dataset, feature_sets, [
-    #             "w2v2-large", "hubert-large", "wavlm-large",
-    #         ], "audioslice", name="model-comparison-full-audioslice")
-    #         _plot_model_comparison(dataset, feature_sets, [
-    #             "xlsr-53", "w2v2-phoneme", "w2v2-multipa",
-    #         ], "featslice", name="model-comparison-pr", print_sliced=False)
+        if dataset == "timit":
+            _plot_model_comparison(dataset, feature_sets, [
+                "w2v2-large", "hubert-large", "wavlm-large",
+            ], "audioslice", name="model-comparison-full-audioslice")
+            _plot_model_comparison(dataset, feature_sets, [
+                "xlsr-53", "w2v2-phoneme", "w2v2-multipa",
+            ], "featslice", name="model-comparison-pr", print_sliced=False)
 
-    #     _plot_phonological_vector_analysis(dataset)
+        _plot_phonological_vector_analysis(dataset)
 
     # Figures for Interspeech 2026 submission
-    # _plot_masked_similarity(["w2v2-large", "hubert-large", "wavlm-large"])
+    _plot_masked_similarity(["w2v2-large", "hubert-large", "wavlm-large"])
     for dataset in ["timit", "voxangeles"]:
-        # phones = filter_phones(pd.read_csv(f"feats/{dataset}.csv"))
-        # quadruples = get_quadruples(phones)
-        # feature_sets = _get_feature_sets(quadruples)
+        phones = filter_phones(pd.read_csv(f"feats/{dataset}.csv"))
+        quadruples = get_quadruples(phones)
+        feature_sets = _get_feature_sets(quadruples)
 
-        # _plot_pooling_comparison(dataset, feature_sets, ["w2v2-large", "hubert-large", "wavlm-large"])
-        # for model in ["w2v2-large", "hubert-large", "wavlm-large"]:
-        #     _plot_position_comparison(dataset, model, feature_sets=feature_sets)
-        # for model in ["wavlm-large-24", "hubert-large-24", "w2v2-large-9", "melspec-0", "mfcc-0"]:
-        #     _plot_random_position_comparison(dataset, model, feature_sets=feature_sets)
-        # _plot_random_position_modelwise_comparison(
-        #     ["wavlm-large-24", "hubert-large-24", "w2v2-large-9", "melspec-0", "mfcc-0"],
-        #     dataset, feature_sets, ["l_2", "l_1", "ipa", "r_1", "r_2"],
-        # )
+        _plot_pooling_comparison(dataset, feature_sets, ["w2v2-large", "hubert-large", "wavlm-large"])
+        for model in ["w2v2-large", "hubert-large", "wavlm-large"]:
+            _plot_position_comparison(dataset, model, feature_sets=feature_sets)
+        for model in ["wavlm-large-24", "hubert-large-24", "w2v2-large-9", "melspec-0", "mfcc-0"]:
+            _plot_random_position_comparison(dataset, model, feature_sets=feature_sets)
+        _plot_random_position_modelwise_comparison(
+            ["wavlm-large-24", "hubert-large-24", "w2v2-large-9", "melspec-0", "mfcc-0"],
+            dataset, feature_sets, ["l_2", "l_1", "ipa", "r_1", "r_2"],
+        )
 
         unfiltered_phones = filter_phones(pd.read_csv(f"feats/{dataset}.csv"), cutoff=0)
         _plot_contextual_orthogonality(dataset, ["w2v2-large", "hubert-large", "wavlm-large", ], unfiltered_phones)
 
-        # for model in ["wavlm-large-24", "hubert-large-24", "w2v2-large-9", "w2v2-large-22"]:
-        #     _plot_contextual_vector_analysis(dataset, model, unfiltered_phones)
-        # _plot_phonological_vector_analysis(dataset, slice="center-featslice")
-        # _plot_edges(dataset, "wavlm-large-24")
-
-
-    # df = pd.read_csv(f"small/metadata.csv")
-    # df["ipa"] = df["middle_phone"]
-    # phones = filter_phones(df)
-    # quadruples = get_quadruples(phones)
-    # feature_sets = _get_feature_sets(quadruples)
-    # feature_sets_cons, feature_sets_vowel = _get_consonant_vowel_feature_sets(feature_sets)
-
-    # # for pool in ["average", "center", "1q", "2q", "4q", "5q"]:
-    # #     _plot_success_rates_with_target_col("triphones-small", feature_sets, "wavlm-large", pool, "pool-comparison")
-
-    # for pool in ["1q", "2q", "center", "4q", "5q"]:
-    #     for target_col in ["start_phone", "middle_phone", "end_phone"]:
-    #         _plot_consonant_vowel_comparison(
-    #             "triphones-small", feature_sets, feature_sets_cons, feature_sets_vowel,
-    #             model="wavlm-large", sliced=f"{pool}-featslice-{target_col}", include_legend=True, path="contextual")
+        for model in ["wavlm-large-24", "hubert-large-24", "w2v2-large-9", "w2v2-large-22"]:
+            _plot_contextual_vector_analysis(dataset, model, unfiltered_phones)
+        _plot_phonological_vector_analysis(dataset, slice="center-featslice")
+        _plot_edges(dataset, "wavlm-large-24")

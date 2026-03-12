@@ -13,10 +13,10 @@ from TTS.api import TTS
 
 def _get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_name", type=str, default="tts_models/en/vits/vits")
+    parser.add_argument("--model_name", type=str, default="tts_models/en/vctk/vits")
     parser.add_argument("--device", type=str, default="cuda:0" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--output_path", type=Path, default=Path("./triphones"))
-    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--export_to_datasets", action="store_true")
 
     args = parser.parse_args()
@@ -38,10 +38,8 @@ if __name__ == "__main__":
     tts.synthesizer.tts_model.tokenizer.text_cleaner = None
 
     # Generate words
-    # vowels = ['i', 'ɪ', 'ʊ', 'u', 'ɛ', 'ə', 'æ', 'ɑ', 'ɔ']
-    # consonants = ['ɹ', 'ɾ', 'm', 'n', 'ŋ', 'p', 't', 'ʧ', 'k', 'b', 'd', 'ʤ', 'ɡ' ,'f', 'θ', 's', 'ʃ', 'v', 'ð', 'z', 'ʒ', 'l', 'r']
-    vowels = ['i', 'ɪ', ]
-    consonants = ['ɹ', 'ɾ', 'm', ]
+    vowels = ['i', 'ɪ', 'ʊ', 'u', 'ɛ', 'ə', 'æ', 'ɑ', 'ɔ']
+    consonants = ['ɹ', 'ɾ', 'm', 'n', 'ŋ', 'p', 't', 'ʧ', 'k', 'b', 'd', 'ʤ', 'ɡ' ,'f', 'θ', 's', 'ʃ', 'v', 'ð', 'z', 'ʒ', 'l', 'r']
 
     vocab = tts.synthesizer.tts_model.tokenizer.characters.vocab
     assert all(p in vocab for p in vowels + consonants)
@@ -62,7 +60,7 @@ if __name__ == "__main__":
     print("Total synthesized words:", len(words) * len(tts.speakers))
 
     test_speaker_indices = np.random.default_rng(args.seed).choice(len(tts.speakers), size=len(tts.speakers)//2, replace=False)
-    test_speakers = tts.speakers[test_speaker_indices]
+    test_speakers = np.array(tts.speakers)[test_speaker_indices]
     print(f"Test speakers ({len(test_speakers)}):", test_speakers)
 
     # Synthesize words
@@ -70,18 +68,18 @@ if __name__ == "__main__":
     for speaker, (word_type, start_phone, middle_phone, end_phone) in tqdm(product(tts.speakers, words), total=len(words) * len(tts.speakers)):
         # Customize word a bit for better synthesis quality
         if word_type == "cvc":
-            word = f"{start_phone}|ˈ{middle_phone}ː|{end_phone}"
+            word = f"{start_phone}ˈ{middle_phone}ː{end_phone}"
             word_len = 5
             start_phone_len, end_phone_len = 1, 1
         elif word_type == "vcv":
-            word = f"{start_phone}ː|{middle_phone}|ˈ{end_phone}ː"
+            word = f"{start_phone}ː{middle_phone}ˈ{end_phone}ː"
             word_len = 6
             start_phone_len, end_phone_len = 2, 3
         else:
             raise ValueError(f"Invalid word type: {word_type}")
 
         # Give context to word for better synthesis quality
-        text = f"aɪ s|ˈeɪ, {word}, ɐ|ɡ|ˈɛ|n"
+        text = f"aɪ sˈeɪ, {word}, ɐɡˈɛn"
         start_token_len, end_token_len = 17, 11
 
         # Feed to TTS model
@@ -101,7 +99,7 @@ if __name__ == "__main__":
         # Slice only the word of interest
         start_frame = stride_size * torch.nonzero(alignments[start_token_len])[0]
         end_frame = stride_size * torch.nonzero(alignments[-end_token_len])[0]
-        wav = wav[start_frame:end_frame]
+        sliced_wav = wav[start_frame:end_frame]
 
         # Obtain the time alignment of center phone
         start_phone_token_len = (start_phone_len + 1) * 2
@@ -111,8 +109,8 @@ if __name__ == "__main__":
         center_max = stride_size * torch.nonzero(middle_phone_alignment)[-1] - start_frame
 
         # Save audio
-        audio_path = "audio" / f"{speaker}_{args.seed}_{start_phone}{middle_phone}{end_phone}.wav"
-        sf.write(str(args.output_path / audio_path), wav, sample_rate)
+        audio_path = f"audio/{speaker}_{args.seed}_{start_phone}{middle_phone}{end_phone}.wav"
+        sf.write(str(args.output_path / audio_path), sliced_wav, sample_rate)
 
         metadata.append({
             "speaker": speaker,
@@ -122,17 +120,21 @@ if __name__ == "__main__":
             "middle_phone": middle_phone,
             "end_phone": end_phone,
             "full_context": text,
-            "min": center_min / sample_rate,
-            "max": center_max / sample_rate,
+            "min": center_min.item() / sample_rate,
+            "max": center_max.item() / sample_rate,
             "audio_path": str(audio_path),
             "split": "test" if speaker in test_speakers else "train",
         })
 
     df = pd.DataFrame(metadata)
+    # PanPhon compatibility
+    for col in ["start_phone", "middle_phone", "end_phone"]:
+        df[col] = df[col].apply(lambda x: x.replace("ʧ", "t͡ʃ").replace("ʤ", "d͡ʒ"))
+
     df.to_csv(args.output_path / "metadata.csv", index=False)
 
     if args.export_to_datasets:
         ds = Dataset.from_pandas(df)
         ds = ds.add_column("audio", df["audio_path"].tolist())
         ds = ds.cast_column("audio", Audio(sampling_rate=sample_rate))
-        ds.push_to_hub("juice500/triphone-vits-en", private=True)
+        ds.push_to_hub("juice500/triphone-vctk-vits", private=True)

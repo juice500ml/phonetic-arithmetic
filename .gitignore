@@ -3,6 +3,10 @@ feats/
 data/
 envs/
 envs
+small/*
+triphones/*
+plots/
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

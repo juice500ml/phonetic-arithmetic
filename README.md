@@ -41,7 +41,7 @@
 ## Install
 ```bash
 micromamba install -y python=3.10 pytorch pytorch-cuda=12.* -c pytorch -c nvidia -c conda-forge
-pip install transformers==4.35.0 pandas>2 librosa>0.10 numpy==1.23.5 datasets praatio panphon scipy tqdm praat-parselmouth
+pip install transformers==4.35.0 pandas>2 librosa>0.10 numpy==1.23.5 datasets praatio panphon scipy tqdm praat-parselmouth specplotter
 
 # For training synthesis experiments (scale experiments)
 pip install git+https://github.com/juice500ml/vocos.git@wavlm
@@ -74,7 +74,7 @@ dataset="timit"
 for i in {0..24}
 do
   # Feature-slicing
-  CUDA_VISIBLE_DEVICES=2 python3 extract_features.py \
+  python3 extract_features.py \
     --model $model \
     --dataset_csv "feats/${dataset}.csv" \
     --output_path "feats/${dataset}-${model_name}-${i}-featslice.pkl" \
@@ -157,10 +157,65 @@ for i in "${!features2[@]}"; do
     --synth_model juice500/vocos-wavlm-libritts
 ```
 
+## Contextualization experiments
+```bash
+# Center pooling
+python3 extract_features.py \
+    --model $model \
+    --dataset_csv "feats/${dataset}.csv" \
+    --output_path "feats/${dataset}-${model_name}-${i}-featslice.pkl" \
+    --device cuda:0 \
+    --layer_index $i \
+    --pool center
+
+# Reconstruction experiment
+python3 masking_similarity.py \
+    --model $model \
+    --dataset_csv "feats/${dataset}.csv" \
+    --output_path "feats/${dataset}-${model_name}-masking-similarity.pkl" \
+    --device cuda:0
+
+# Neighboring experiment
+# l_1: Using left phone, ...
+for target_col in ipa l_1 r_1 l_2 r_2 l_3 r_3 l_4 r_4 l_5 r_5; do
+    python3 estimate_similarity.py \
+        --model wavlm-large \
+        --slice featslice \
+        --dataset $dataset \
+        --target_col $target_col
+
+# Random pooling experiment
+python3 extract_features.py \
+    --model $model \
+    --dataset_csv "feats/${dataset}.csv" \
+    --output_path "feats/${dataset}-${model_name}-${i}-featslice.pkl" \
+    --device cuda:0 \
+    --layer_index $i \
+    --pool random
+
+for target_col in ipa l_1 r_1 l_2 r_2 l_3 r_3 l_4 r_4 l_5 r_5; do
+    python3 estimate_similarity.py \
+        --model wavlm-large \
+        --slice featslice \
+        --dataset $dataset \
+        --is_random
+
+# Phonetic segmentation experiments
+python3 estimate_edge.py \
+    --feature_path "feats/${dataset}-${model_name}-${i}-featslice.pkl" \
+    --output_path "feats/edges-${dataset}-${model}-center-featslice.pkl" \
+    --model $model \
+    --device cuda:0
+
+```
+
 ## Plot all figures
 ```bash
 python3 plot_everything.py
 
 # For synthesizing above demo audios and spectrograms, run:
 python3 plot_synth.py
+
+# For plotting positional phonological vector's huge plot, run:
+python3 plot_context.py
 ```
