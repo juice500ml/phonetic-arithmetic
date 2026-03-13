@@ -1123,26 +1123,42 @@ if __name__ == "__main__":
         _plot_phonological_vector_analysis(dataset)
 
     # Figures for Interspeech 2026 submission
+    # Figure 11
     _plot_masked_similarity(["w2v2-large", "hubert-large", "wavlm-large"])
+
     for dataset in ["timit", "voxangeles"]:
         phones = filter_phones(pd.read_csv(f"feats/{dataset}.csv"))
         quadruples = get_quadruples(phones)
         feature_sets = _get_feature_sets(quadruples)
 
+        # Figure 2
         _plot_pooling_comparison(dataset, feature_sets, ["w2v2-large", "hubert-large", "wavlm-large"])
         for model in ["w2v2-large", "hubert-large", "wavlm-large"]:
             _plot_position_comparison(dataset, model, feature_sets=feature_sets)
         for model in ["wavlm-large-24", "hubert-large-24", "w2v2-large-9", "melspec-0", "mfcc-0"]:
             _plot_random_position_comparison(dataset, model, feature_sets=feature_sets)
+
+        # Figure 3
+        _plot_position_all_models_comparison(dataset, ["w2v2-large", "hubert-large", "wavlm-large"], feature_sets)
+        # Figure 4
         _plot_random_position_modelwise_comparison(
-            ["wavlm-large-24", "hubert-large-24", "w2v2-large-9", "melspec-0", "mfcc-0"],
+            ["wavlm-large-24", "hubert-large-24", "w2v2-large-9", "melspec", "mfcc"],
             dataset, feature_sets, ["l_2", "l_1", "ipa", "r_1", "r_2"],
         )
 
+        # Figure 8
         unfiltered_phones = filter_phones(pd.read_csv(f"feats/{dataset}.csv"), cutoff=0)
         _plot_contextual_orthogonality(dataset, ["w2v2-large", "hubert-large", "wavlm-large", ], unfiltered_phones)
 
+        # Figure 6
         for model in ["wavlm-large-24", "hubert-large-24", "w2v2-large-9", "w2v2-large-22"]:
             _plot_contextual_vector_analysis(dataset, model, unfiltered_phones)
+
+        # Figure 5
         _plot_phonological_vector_analysis(dataset, slice="center-featslice")
+
+        # Figure 9
         _plot_edges(dataset, "wavlm-large-24")
+
+        # Figure 7
+        _plot_contextual_layerwise_norm(dataset, ["w2v2-large", "hubert-large", "wavlm-large"], unfiltered_phones)

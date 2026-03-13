@@ -62,6 +62,8 @@ def _pool_feats(row, pool):
 def _get_stride_size(model):
     if model in ("melspec", "mfcc"):
         return 512
+    elif model in ("melspec-kaldi", "mfcc-kaldi"):
+        return 160
     else:
         return 320
 
@@ -69,7 +71,9 @@ def _get_stride_size(model):
 def _get_window_size(model):
     if model in ("melspec", "mfcc"):
         return 1 # minimum size
-    else:
+    elif model in ("melspec-kaldi", "mfcc-kaldi"):
+        return 400
+    else: # ssl models
         return 400
 
 
@@ -135,23 +139,77 @@ def get_mfcc_vocos():
     return _mfcc
 
 
+# Closely follow Lhotse's implementation of Kaldi
+def kaldi_povey_window(n):
+    a = 2 * np.pi / (n - 1)
+    return np.power(0.5 - 0.5 * np.cos(a * np.arange(n)), 0.85)
+
+
+def melspec_kaldi(y, sr, n_mels=80, n_fft=None): # n_fft not used
+    assert sr == 16000
+
+    win_length = int(round(0.025 * sr))
+    hop_length = int(round(0.01 * sr))
+
+    y = y - np.mean(y)
+    y = np.append(y[0], y[1:] - 0.97 * y[:-1])
+
+    S = librosa.feature.melspectrogram(
+        y=y,
+        sr=sr,
+        n_fft=512,
+        hop_length=hop_length,
+        win_length=win_length,
+        window=kaldi_povey_window(win_length),
+        center=True,
+        pad_mode="reflect",
+        power=1.0,
+        n_mels=n_mels,
+        fmin=20,
+        fmax=(sr // 2) - 400,
+        htk=False,
+        norm=None,
+    )
+    return np.log(np.maximum(S, 1e-10))
+
+
+def mfcc_kaldi(y, sr, n_fft=None): # n_fft not used
+    log_S = melspec_kaldi(y, sr, n_mels=23)
+    n_mfcc = 13
+    mfccs = librosa.feature.mfcc(
+        S=log_S,
+        n_mfcc=n_mfcc,
+        dct_type=2,
+        norm=None,
+        lifter=0,
+    )
+
+    L = 22
+    n = np.arange(1, n_mfcc + 1)
+    lift = 1.0 + (L / 2.0) * np.sin(np.pi * n / L)
+    mfccs *= lift[:, np.newaxis]
+
+    return mfccs
+
 if __name__ == "__main__":
     args = _get_args()
     np.random.seed(42)
 
+    traditional_features = {
+        "melspec": functools.partial(librosa.feature.melspectrogram, sr=args.sr),
+        "mfcc": functools.partial(librosa.feature.mfcc, sr=args.sr),
+        "melspec-kaldi": functools.partial(melspec_kaldi, sr=args.sr),
+        "mfcc-kaldi": functools.partial(mfcc_kaldi, sr=args.sr),
+        "mfcc-vocos": get_mfcc_vocos(),
+    }
+
     df = pd.read_csv(args.dataset_csv)
-    # if not Path(df.iloc[0].audio_path).is_absolute():
-    #     df.audio_path = df.audio_path.apply(lambda x: str(Path(args.dataset_csv.parent) / x))
     if args.split != "both":
         df = df[df.split == args.split]
 
     print("Extracting features...")
-    if args.model in ("melspec", "mfcc", "mfcc-vocos"):
-        feat_func = {
-            "melspec": functools.partial(librosa.feature.melspectrogram, sr=args.sr),
-            "mfcc": functools.partial(librosa.feature.mfcc, sr=args.sr),
-            "mfcc-vocos": get_mfcc_vocos(),
-        }[args.model]
+    if args.model in traditional_features.keys():
+        feat_func = traditional_features[args.model]
         data = {}
         if args.slice:
             df["feat"] = None

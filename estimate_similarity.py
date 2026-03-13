@@ -187,7 +187,7 @@ def parse_args():
     )
     parser.add_argument(
         "--model",
-        choices=["wavlm-large", "hubert-large", "w2v2-large", "xlsr-53", "w2v2-phoneme", "w2v2-multipa", "melspec", "mfcc"],
+        choices=["wavlm-large", "hubert-large", "w2v2-large", "xlsr-53", "w2v2-phoneme", "w2v2-multipa", "melspec", "mfcc", "melspec-kaldi", "mfcc-kaldi", ],
         required=True,
     )
     parser.add_argument(
@@ -223,7 +223,7 @@ if __name__ == '__main__':
         df.feat = df.feat.apply(normalize)
 
         columns = ["l_3", "l_2", "l_1", "ipa", "r_1", "r_2", "r_3"]
-        if args.model in ("mfcc", "melspec"):
+        if args.model in ("mfcc", "melspec", "mfcc-kaldi", "melspec-kaldi"):
             bins = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
         else:
             bins = [0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95]

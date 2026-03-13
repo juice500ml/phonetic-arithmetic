@@ -122,10 +122,11 @@ python3 extract_features.py \
 
 ## Estimate cosine similarities between representations
 ```bash
+slice_type="featslice" # or audio_slice
 python3 estimate_similarity.py \
-    --model wavlm-large \
-    --slice featslice \
-    --dataset timit
+    --model $model \
+    --slice $slice_type \
+    --dataset_path "feats/${dataset}.csv"
 ```
 
 ## Synthesis experiments
@@ -158,6 +159,7 @@ for i in "${!features2[@]}"; do
 ```
 
 ## Contextualization experiments
+### Section 3.1 Frame-level compositionality
 ```bash
 # Center pooling
 python3 extract_features.py \
@@ -167,46 +169,44 @@ python3 extract_features.py \
     --device cuda:0 \
     --layer_index $i \
     --pool center
+```
 
-# Reconstruction experiment
-python3 masking_similarity.py \
-    --model $model \
-    --dataset_csv "feats/${dataset}.csv" \
-    --output_path "feats/${dataset}-${model_name}-masking-similarity.pkl" \
-    --device cuda:0
-
+### Section 3.2 Contextual phonological vectors 
+```bash
 # Neighboring experiment
 # l_1: Using left phone, ...
 for target_col in ipa l_1 r_1 l_2 r_2 l_3 r_3 l_4 r_4 l_5 r_5; do
     python3 estimate_similarity.py \
-        --model wavlm-large \
-        --slice featslice \
-        --dataset $dataset \
+        --model $model \
+        --slice $slice_type \
+        --dataset_path "feats/${dataset}.csv" \
         --target_col $target_col
+done
 
 # Random pooling experiment
 python3 extract_features.py \
     --model $model \
     --dataset_csv "feats/${dataset}.csv" \
-    --output_path "feats/${dataset}-${model_name}-${i}-featslice.pkl" \
+    --output_path "feats/${dataset}-${model_name}-${i}-random-featslice.pkl" \
     --device cuda:0 \
     --layer_index $i \
     --pool random
 
-for target_col in ipa l_1 r_1 l_2 r_2 l_3 r_3 l_4 r_4 l_5 r_5; do
-    python3 estimate_similarity.py \
-        --model wavlm-large \
-        --slice featslice \
-        --dataset $dataset \
-        --is_random
+python3 estimate_similarity.py \
+    --model $model \
+    --slice featslice \
+    --dataset_path "feats/${dataset}-${model}-${i}-random-featslice.pkl" \
+    --is_random
+```
 
+### Section 3.4 Phonetic segmentation
+```bash
 # Phonetic segmentation experiments
 python3 estimate_edge.py \
     --feature_path "feats/${dataset}-${model_name}-${i}-featslice.pkl" \
     --output_path "feats/edges-${dataset}-${model}-center-featslice.pkl" \
     --model $model \
     --device cuda:0
-
 ```
 
 ## Plot all figures
@@ -216,6 +216,6 @@ python3 plot_everything.py
 # For synthesizing above demo audios and spectrograms, run:
 python3 plot_synth.py
 
-# For plotting positional phonological vector's huge plot, run:
+# For plotting positional phonological vector's huge plot (Section 4.1) and Figure 1, run:
 python3 plot_context.py
 ```
