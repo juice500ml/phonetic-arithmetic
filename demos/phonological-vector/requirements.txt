@@ -1,0 +1,8 @@
+transformers
+torch
+librosa
+vocos @ git+https://github.com/juice500ml/vocos@wavlm
+numpy
+gradio
+specplotter
+matplotlib

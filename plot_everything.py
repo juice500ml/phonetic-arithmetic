@@ -608,7 +608,7 @@ def _plot_phonological_vector_analysis(dataset, model="wavlm-large-24-featslice"
     _plot_cos_matrix(list(pos_neg_phones.keys()), avg_phon_vectors, fname=dataset, **kwargs)
 
 
-def _calculate_contextual_vectors(df, phones, locations):
+def _calculate_contextual_vectors(df, phones, locations, pos_neg_phones=None):
     column_name = {"ipa": "0"}
     for i in range(5):
         column_name[f"l_{i}"] = f"-{i}"
@@ -625,10 +625,11 @@ def _calculate_contextual_vectors(df, phones, locations):
         ("voi", [("cons", 1)]),
     ]
 
-    pos_neg_phones = {
-        feat: separate_phones(phones, feat, constraints)
-        for feat, constraints in cases
-    }
+    if pos_neg_phones is None:
+        pos_neg_phones = {
+            feat: separate_phones(phones, feat, constraints)
+            for feat, constraints in cases
+        }
 
     # Calculate various types of phonological vectors
     avg_phon_vectors = {}
