@@ -1,8 +1,10 @@
-# phonetic-arithmetic
+# Phonological vectors
+- Implementation of the paper [[b]=[d]-[t]+[p]: Self-supervised Speech Models Discover Phonological Vector Arithmetic (ACL 2026)](https://arxiv.org/abs/2602.18899).
 
 ## Interactive Demo
-Will be released after paper acceptance.
-
+- You can try it here! https://huggingface.co/spaces/juice500/phonological-vector
+<img width="1143" height="673" alt="image" src="https://github.com/user-attachments/assets/c295f82a-d4a7-415b-86a5-3374d566b8d5" />
+<img width="1142" height="294" alt="image" src="https://github.com/user-attachments/assets/98bd5922-a85e-45f9-87b4-de065927e4b7" />
 
 ## Synthesis Examples
 
