@@ -264,33 +264,30 @@ def swap_synth(model_name):
     ENGINE.synth = VOCOS[model_name]
 
 
-with gr.Blocks(title="Speech Modification Demo") as demo:
- 
+with gr.Blocks(title="Phonological Vector-based Speech Editing Demo") as demo:
+    with gr.Row():
+        gr.Markdown("""
+## 🎙️ Phonological Vector-based Speech Editing Demo
+
+Demonstration for the paper [[b]=[d]-[t]+[p]: Self-supervised Speech Models Discover Phonological Vector Arithmetic](https://arxiv.org/abs/2602.18899).
+This demo reproduces Experiment 2: Scale of Phonological Vectors, illustrating the controllability of speech editing by phonological vectors.
+
+**Upload, record, or use the example audio (or word). Then, inspect the spectrogram, select the time window, choose a phonological vector to apply, then hit Run.**
+(For the example words, we gave 0.25s margin to the start and end of the word.)""")
+
     with gr.Row():
         with gr.Column(scale=1):
-            gr.Markdown(
-                """
-                ## 🎙️ Phonological Vector Demo
+            gr.Markdown("""
+### Hyperparameters
+- **Start / Stop (s)**: Time range (in seconds) over which the phonological vector is applied. Use the input spectrogram to identify the target phone's boundaries.
+- **Lambda**: Strength of the phonological vector. Positive values strengthen the selected feature; negative values strengthens the opposite feature.
+- **Vocos training dataset**: Training corpus used for the vocoder (Vocos) that resynthesizes the modified representation back to audio.
+- **Vector extraction method**: How phonological vectors are estimated from S3M representations. Different options correspond to different training dataset/calculating the vectors.
+- **Phonological feature**: The phonological vector to add into the selected time window.
+""")
 
-                Demonstration for the paper [[b]=[d]-[t]+[p]: Self-supervised Speech Models Discover Phonological Vector Arithmetic](https://arxiv.org/abs/2602.18899).
-
-                Upload, record, or use the example audio.
-                For the example words, we gave 0.25s margin to the start and end of the word.
-                Inspect the spectrogram, select the time window, choose a phonological vector to apply, then hit **Run**.
-                """
-            )
-
-            # ── Row 1: input audio ────────────────────────────────────────────────
-            audio_dropdown = gr.Dropdown(
-                choices=[w["text"] for w in EXAMPLE_WRD],
-                label="Choose a word to modify (or record your own below)",
-                value="Full sentence",
-                interactive=True,
-            )
-    
         with gr.Column(scale=1):
-            # ── Row 3: time selection + modification ──────────────────────────────
-            gr.Markdown("### Modification hyperparameters")
+            gr.Markdown("""### Hyperparameters""")
             with gr.Row():
                 start_time = gr.Number(label="Start (s)", value=0.0, precision=3, scale=1, interactive=True)
                 stop_time = gr.Number(label="Stop (s)", value=1.0, precision=3, scale=1, interactive=True)
@@ -329,41 +326,49 @@ with gr.Blocks(title="Speech Modification Demo") as demo:
 
     with gr.Row():
         with gr.Column(scale=1):
-            gr.Markdown("### Input")
+            gr.Markdown("### Input audio")
+            audio_dropdown = gr.Dropdown(
+                choices=[w["text"] for w in EXAMPLE_WRD],
+                label="Choose a word to modify (or record your own below)",
+                value=None,
+                interactive=True,
+            )
             audio_input = gr.Audio(
-                label="Input Audio",
                 type="numpy",
                 sources=["upload", "microphone"],
                 recording=True,
-                value=_read_audio(EXAMPLE_AUDIO),
+                value=None,
             )
+        with gr.Column(scale=1):
+            gr.Markdown("### Output audio")
+            audio_output = gr.Audio(type="numpy", interactive=False)
 
+
+    with gr.Row():
+        with gr.Column(scale=1):
+            gr.Markdown("### Input spectrogram")
             trigger_source = gr.State(value=None)
+            audio_dropdown.change(fn=lambda x: x, inputs=[audio_dropdown], outputs=[trigger_source])
             audio_input.upload(fn=lambda: "upload", inputs=[], outputs=[trigger_source])
             audio_input.stop_recording(fn=lambda: "record", inputs=[], outputs=[trigger_source])
-            audio_dropdown.change(fn=lambda x: x, inputs=[audio_dropdown], outputs=[trigger_source])
 
             input_audio_plot = gr.Plot(
-                label="Input Spectrogram",
                 show_label=True,
-                value=plot_spectrogram_original(_read_audio(EXAMPLE_AUDIO), "Full sentence"),
                 elem_id="input-spectrogram-plot",
             )
             trigger_source.change(
                 fn=_read_partial_audio,
                 inputs=[audio_input, trigger_source],
                 outputs=audio_input,
-            )
-            trigger_source.change(
+            ).then(
                 fn=plot_spectrogram_original,
                 inputs=[audio_input, trigger_source],
                 outputs=input_audio_plot,
             )
 
         with gr.Column(scale=1):
-            gr.Markdown("### Output")
-            audio_output = gr.Audio(label="Modified Audio", type="numpy", interactive=False)
-            output_audio_plot = gr.Plot(label="Output Spectrogram", show_label=True)
+            gr.Markdown("### Output spectrogram")
+            output_audio_plot = gr.Plot(show_label=True)
 
             run_btn.click(
                 fn=run_speech_edit,

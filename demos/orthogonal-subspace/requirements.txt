@@ -1,0 +1,7 @@
+transformers
+torch
+librosa
+numpy
+gradio
+specplotter
+matplotlib
