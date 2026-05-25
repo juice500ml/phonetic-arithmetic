@@ -1,5 +1,6 @@
 # Phonological vectors
 - Implementation of the paper [[b]=[d]-[t]+[p]: Self-supervised Speech Models Discover Phonological Vector Arithmetic (ACL 2026)](https://arxiv.org/abs/2602.18899).
+- Presentation video for [ACL 2026](https://youtu.be/4xWh4ONxjn8) and [my UVA talk](https://www.youtube.com/watch?v=DtFYKvNo9IQ).
 
 ## Interactive Demo
 - You can try it here! https://huggingface.co/spaces/juice500/phonological-vector
